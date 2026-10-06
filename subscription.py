@@ -340,9 +340,10 @@ class SubscriptionManager:
             status=UserStatus.ACTIVE,
             pending_order_uid=None,
         )
-        if price == settings.router_price:
-            # новый месяц роутерного тарифа: лимит трафика считается заново от этой точки
-            updates["traffic_period_start"] = (user.traffic_in or 0) + (user.traffic_out or 0)
+        if user.device_os == settings.ROUTER_DEVICE:
+            # оплата открывает роутеру новое окно лимита трафика
+            updates["traffic_period_start"] = user.traffic_total_mb()
+            updates["traffic_period_date"] = datetime.now().date().isoformat()
         if provider == "NOWPayments":
             # payment_token у крипты - не настоящий токен на автосписание
             # (в крипте его не бывает без предоплаченного баланса у
@@ -355,12 +356,7 @@ class SubscriptionManager:
         user = self.user_manager.get_user(user_id)
         await self.vpn_manager.setup_xray(user)
         try:
-            text = "Ваш платёж успешно завершён, подписка активирована! 🎉"
-            if price == settings.router_price:
-                text += (f"\n\nСсылка-подписка для роутера (VLESS):\n"
-                         f"https://{credentials.SUBSCRIPTION_DOMAIN}/sub/{user.client_uuid}\n"
-                         f"Лимит — {settings.ROUTER_TRAFFIC_LIMIT_GB} ГБ в месяц.")
-            await vpn_bot.send_message(user_id, text)
+            await vpn_bot.send_message(user_id, "Ваш платёж успешно завершён, подписка активирована! 🎉")
         except Exception as e:
             # заблокировал бота: оплата уже зачтена, а письмо владельцу нужно
             # всё равно (30.09.26 без этого письмо о cheet_nickers не ушло)

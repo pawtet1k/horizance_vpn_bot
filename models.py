@@ -58,8 +58,9 @@ def _subscription_defaults() -> dict:
         'fingerprint': None,
         'traffic_in': None,
         'traffic_out': None,
-        # трафик (МБ, in+out) на момент последней оплаты роутерного тарифа — от него считается месячный лимит
+        # роутер: трафик (МБ, in+out) и дата (ISO) начала текущего окна лимита — см. settings.ROUTER_DEVICE
         'traffic_period_start': None,
+        'traffic_period_date': None,
         'notifications': None
     }
 
@@ -89,6 +90,25 @@ class User:
 
         if not isinstance(self.status, UserStatus):
             self.status = UserStatus(self.status)
+
+    # ---- роутер (settings.ROUTER_DEVICE): лимит трафика окнами по ROUTER_PERIOD_DAYS ----
+
+    def traffic_total_mb(self) -> int:
+        return (self.traffic_in or 0) + (self.traffic_out or 0)
+
+    def router_window_end(self):
+        """Дата, с которой начинается следующее окно лимита (None — окно ещё не открыто)."""
+        if not self.traffic_period_date:
+            return None
+        return (datetime.fromisoformat(self.traffic_period_date)
+                + timedelta(days=settings.ROUTER_PERIOD_DAYS)).date()
+
+    def router_quota_exhausted(self) -> bool:
+        end = self.router_window_end()
+        if end is None or datetime.now().date() >= end:
+            return False  # окна нет или оно кончилось — node_monitor откроет новое
+        used = self.traffic_total_mb() - (self.traffic_period_start or 0)
+        return used > settings.ROUTER_TRAFFIC_LIMIT_GB * 1024
 
 
 class WebUser:

@@ -82,7 +82,6 @@ async def api_subscription(request: Request):
 PLAN_PRICES = {
     "month": settings.default_price,
     "year": settings.yearly_price,
-    "router": settings.router_price,
 }
 
 
@@ -156,6 +155,7 @@ async def config_page(request: Request):
         await bot.send_vpn_setup_rejection_msg(messenger, user_id)
         return _render_messages(request, "Настройка VPN", messenger)
 
+    # роутер — не ОС с приложением, а режим подписки (settings.ROUTER_DEVICE), поэтому отдельной кнопкой
     return templates.TemplateResponse(request, "config_select_os.html", {
         "os_buttons": build_os_buttons()
     })
@@ -166,7 +166,7 @@ async def config_finish(request: Request, device_os: str):
     user_id, user = _current_user(request)
     if not user_id:
         return RedirectResponse(url="/auth")
-    if device_os not in settings.VPN_CLIENT_DOWNLOAD_URLS:
+    if device_os not in settings.VPN_CLIENT_DOWNLOAD_URLS and device_os != settings.ROUTER_DEVICE:
         return RedirectResponse(url="/config")
 
     messenger = CapturingMessenger()

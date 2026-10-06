@@ -200,15 +200,6 @@ async def select_plan_year(event):
         user_manager, subscription_manager
     )
 
-@vpn_bot.on(events.CallbackQuery(data="select_plan_router"))
-@safe_handler
-async def select_plan_router(event):
-    logging_command(event.sender.id)
-    await bot.callback_select_plan(
-        vpn_bot, event.sender.id, settings.router_price,
-        user_manager, subscription_manager
-    )
-
 @vpn_bot.on(events.CallbackQuery(data="change_plan"))
 @safe_handler
 async def change_plan(event):
@@ -239,7 +230,7 @@ async def cancel_subscription(event):
 @safe_handler
 async def cb_device_selected(event):
     device_os = event.data.decode()
-    if device_os not in settings.VPN_CLIENT_DOWNLOAD_URLS:
+    if device_os not in settings.VPN_CLIENT_DOWNLOAD_URLS and device_os != settings.ROUTER_DEVICE:
         return
     await bot.finish_vpn_setup(
         vpn_bot, event.sender.id, device_os, user_manager, vpn_manager

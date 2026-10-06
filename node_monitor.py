@@ -30,7 +30,7 @@ import asyncssh
 import credentials
 import device_guard
 import settings
-from models import UserStatus, trial_expired
+from models import trial_expired
 from my_logger import logger
 from restore_users import clients_to_restore
 from utils import send_email
@@ -72,32 +72,47 @@ class NodeMonitor:
     # ---------- общее ----------
 
     async def _router_quota(self) -> None:
-        """Месячный лимит роутерного тарифа. Роутер может вообще не ходить за /sub (там копится трафик
-        остальных), поэтому у роутеров трафик снимаем здесь, раз в цикл, и при превышении закрываем
-        доступ до следующей оплаты — оплата заново запускает отсчёт (activate_paid_subscription)."""
+        """Лимит трафика роутера (settings.ROUTER_DEVICE) окнами по ROUTER_PERIOD_DAYS. Роутер может вообще
+        не ходить за /sub (там копится трафик остальных), поэтому у роутеров трафик снимаем здесь, раз в цикл.
+        Исчерпал — снимаем uuid с нод до конца окна; новое окно возвращает его обратно. Статус не трогаем:
+        подписка оплачена, закрыт только роутер."""
         limit_mb = settings.ROUTER_TRAFFIC_LIMIT_GB * 1024
-        for user in self.users.get_active_router_users():
+        for user in self.users.get_router_users():
             try:
                 t = await self.vpn.get_user_traffic(str(user.user_id), reset=True)
             except Exception as e:
                 logger.error(f"node_monitor: трафик роутера {user.user_id} не снят: {e}")
                 continue
+            was_exhausted = user.router_quota_exhausted()
             total = self.users.add_traffic(user.user_id, t["uplink"] // 1000000, t["downlink"] // 1000000)
             used = total - (user.traffic_period_start or 0)
-            if used <= limit_mb:
+            end = user.router_window_end()
+            today = datetime.now().date()
+            if end is None or today >= end:
+                # новое окно (или первое — у тех, кто выбрал роутер до появления окон)
+                self.users.update_user(user.user_id, traffic_period_start=total,
+                                       traffic_period_date=today.isoformat())
+                if end and used > limit_mb:  # в прошлом окне роутер отключили — возвращаем
+                    await self.vpn.setup_xray(user)
+                    logger.warning(f"{user.user_id}: новое окно лимита роутера, доступ возвращён")
+                    await self._tell(user.user_id, "Начался новый период: роутер снова работает через VPN.")
+                continue
+            if used <= limit_mb or was_exhausted:
                 continue
             await self.vpn.remove_client_from_xray(user.user_id)
-            self.users.update_user(user.user_id, status=UserStatus.INACTIVE)
-            logger.warning(f"{user.user_id}: роутерный лимит {settings.ROUTER_TRAFFIC_LIMIT_GB} ГБ исчерпан "
-                           f"({used // 1024} ГБ), доступ закрыт до оплаты")
-            if self.bot:
-                try:
-                    await self.bot.send_message(
-                        user.user_id,
-                        f"Лимит роутерной подписки — {settings.ROUTER_TRAFFIC_LIMIT_GB} ГБ в месяц — исчерпан, "
-                        "доступ приостановлен. Чтобы продолжить, оплатите следующий месяц: /pay")
-                except Exception as e:
-                    logger.error(f"{user.user_id}: не удалось сообщить о лимите: {e}")
+            logger.warning(f"{user.user_id}: лимит роутера {settings.ROUTER_TRAFFIC_LIMIT_GB} ГБ исчерпан, "
+                           f"роутер отключён до {end:%d.%m}")
+            await self._tell(user.user_id,
+                             f"Лимит роутера — {settings.ROUTER_TRAFFIC_LIMIT_GB} ГБ за {settings.ROUTER_PERIOD_DAYS} "
+                             f"дней — исчерпан. Роутер снова заработает {end:%d.%m}.")
+
+    async def _tell(self, user_id, text: str) -> None:
+        if not self.bot:
+            return
+        try:
+            await self.bot.send_message(user_id, text)
+        except Exception as e:
+            logger.error(f"{user_id}: не удалось отправить сообщение о лимите роутера: {e}")
 
     def _alert(self, key: str, subject: str, body: str) -> None:
         now = time.time()

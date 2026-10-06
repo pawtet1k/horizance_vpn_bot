@@ -54,6 +54,7 @@ class UserManager:
         traffic_in INTEGER,
         traffic_out INTEGER,
         traffic_period_start INTEGER,
+        traffic_period_date TEXT,
         notifications TEXT
     '''
 
@@ -89,6 +90,10 @@ class UserManager:
                 self.execute_query(f"ALTER TABLE {table} ADD COLUMN traffic_period_start INTEGER")
             except sqlite3.OperationalError:
                 pass  # столбец уже есть (или web_users ещё не создана — тогда он в CREATE)
+            try:
+                self.execute_query(f"ALTER TABLE {table} ADD COLUMN traffic_period_date TEXT")
+            except sqlite3.OperationalError:
+                pass
         self.create_trial_table()
         self.create_web_users_table()
         self.create_payment_orders_table()
@@ -203,9 +208,11 @@ class UserManager:
         )
         return User(**dict(row)) if row else None
 
-    def get_active_router_users(self):
+    def get_router_users(self):
+        """Все, у кого настроен роутер и доступ не закрыт (триал, оплачено, отменено до конца периода)."""
         rows = self.execute_query(
-            "SELECT * FROM users WHERE status = 'active' AND price = ?", (settings.router_price,), fetchall=True
+            "SELECT * FROM users WHERE device_os = ? AND status != 'inactive'", (settings.ROUTER_DEVICE,),
+            fetchall=True
         )
         return [User(**dict(r)) for r in rows or []]
 

@@ -30,7 +30,19 @@
       {{ name }}
     </a>
     {% endfor %}
+    <a href="/config/{{ settings.ROUTER_DEVICE }}" data-busy="vpn"
+       class="col-span-2 bg-surface2 border border-line2 rounded-xl
+              text-ink2 text-[0.95rem]
+              px-3 py-4 w-full
+              flex flex-col items-center gap-2
+              transition-all duration-150
+              hover:border-faint hover:text-white
+              group">
+      <i class="fa-solid fa-wifi text-2xl text-dim group-hover:text-white transition-colors duration-150"></i>
+      {{ settings.ROUTER_LABEL }}
+    </a>
   </div>
+  <p class="text-dim text-xs mt-4">Ссылка одна: роутерная (все устройства дома, {{ settings.ROUTER_TRAFFIC_LIMIT_GB }}&nbsp;ГБ за {{ settings.ROUTER_PERIOD_DAYS }}&nbsp;дней) или обычная (до трёх устройств). При смене прежняя ссылка перестаёт работать.</p>
 
 </section>
 {% endblock %}

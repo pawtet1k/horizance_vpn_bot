@@ -322,7 +322,7 @@ class TestConfigFlow(BotIntegrationTestCase):
         self.assertIn('операционную систему', args[1])
         buttons = kwargs['buttons']
         total_buttons = sum(len(row) for row in buttons)
-        self.assertEqual(total_buttons, len(settings.VPN_CLIENT_DOWNLOAD_URLS))
+        self.assertEqual(total_buttons, len(settings.VPN_CLIENT_DOWNLOAD_URLS) + 1)  # + «Роутер»
         main.vpn_manager.setup_xray.assert_not_awaited()
 
     async def test_device_selection_provisions_vpn_and_sends_link(self):
@@ -480,7 +480,7 @@ class TestSubscriptionFlow(BotIntegrationTestCase):
         args, kwargs = main.vpn_bot.send_message.call_args
         self.assertIn('Выберите тариф', args[1])
         buttons = kwargs['buttons']
-        self.assertEqual(sum(len(row) for row in buttons), 3)  # месяц, год, роутер
+        self.assertEqual(sum(len(row) for row in buttons), 2)  # месяц, год
         self.mock_payment_create.assert_not_called()
 
         user = self.get_user(111001)
@@ -537,7 +537,7 @@ class TestSubscriptionFlow(BotIntegrationTestCase):
         args, kwargs = main.vpn_bot.send_message.call_args
         self.assertIn('Выберите новый тариф', args[1])
         buttons = kwargs['buttons']
-        self.assertEqual(sum(len(row) for row in buttons), 2)  # все тарифы, кроме текущего
+        self.assertEqual(sum(len(row) for row in buttons), 1)  # все тарифы, кроме текущего
 
     async def test_add_subscription_with_zero_price_auto_activates(self):
         """Регрессионный тест на баг: `if not payment: return None` перед
@@ -652,28 +652,68 @@ class TestUdmPayPaymentFlow(BotIntegrationTestCase):
         # подписка ещё не активна - активация приходит отдельным вебхуком
         self.assertEqual(updated_user.status, UserStatus.TRIAL)
 
-    async def test_router_payment_starts_traffic_period(self):
-        self.create_user(777020, price=settings.router_price, status=UserStatus.TRIAL,
+    async def test_router_payment_starts_traffic_window(self):
+        self.create_user(777020, price=99, status=UserStatus.TRIAL, device_os=settings.ROUTER_DEVICE,
                          pending_order_uid='order-router', traffic_in=1000, traffic_out=5000)
         await main.subscription_manager.activate_paid_subscription(main.vpn_bot, 777020, 'order-router')
         user = self.get_user(777020)
         self.assertEqual(user.status, UserStatus.ACTIVE)
         self.assertEqual(user.traffic_period_start, 6000)
-        self.assertIn('/sub/', main.vpn_bot.send_message.call_args.args[1])
+        self.assertEqual(user.traffic_period_date, datetime.now().date().isoformat())
 
-    async def test_router_quota_closes_access_over_limit(self):
+    async def test_router_choice_replaces_regular_link(self):
+        # ссылка одна: обычная или роутерная; смена режима — новый uuid (старый setup_xray снимает с нод)
+        self.create_user(777023, status=UserStatus.ACTIVE, device_os='iOS', client_uuid='old-uuid',
+                         traffic_in=100, traffic_out=200)
+        await main.cb_device_selected(callback_event(777023, settings.ROUTER_DEVICE))
+        user = self.get_user(777023)
+        self.assertEqual(user.device_os, settings.ROUTER_DEVICE)
+        self.assertNotEqual(user.client_uuid, 'old-uuid')
+        self.assertEqual(user.traffic_period_start, 300)
+        text = main.vpn_bot.send_message.call_args.args[1]
+        self.assertIn(f'/sub/{user.client_uuid}', text)
+        self.assertIn('больше не работает', text)
+
+        # тот же режим ещё раз — uuid прежний, окно лимита не сбрасывается
+        main.user_manager.update_user(777023, traffic_out=900)
+        await main.cb_device_selected(callback_event(777023, settings.ROUTER_DEVICE))
+        again = self.get_user(777023)
+        self.assertEqual(again.client_uuid, user.client_uuid)
+        self.assertEqual(again.traffic_period_start, 300)
+
+        await main.cb_device_selected(callback_event(777023, 'Android'))
+        self.assertNotEqual(self.get_user(777023).client_uuid, user.client_uuid)
+
+    async def test_router_quota_disconnects_then_restores_in_new_window(self):
         from node_monitor import NodeMonitor
         limit_mb = settings.ROUTER_TRAFFIC_LIMIT_GB * 1024
-        self.create_user(777021, price=settings.router_price, status=UserStatus.ACTIVE,
-                         traffic_in=0, traffic_out=limit_mb - 10, traffic_period_start=0)
-        self.create_user(777022, price=settings.router_price, status=UserStatus.ACTIVE,
-                         traffic_in=0, traffic_out=100, traffic_period_start=0)
+        today = datetime.now().date()
+        self.create_user(777021, status=UserStatus.ACTIVE, device_os=settings.ROUTER_DEVICE,
+                         traffic_in=0, traffic_out=limit_mb - 10, traffic_period_start=0,
+                         traffic_period_date=today.isoformat())
+        self.create_user(777022, status=UserStatus.ACTIVE, device_os=settings.ROUTER_DEVICE,
+                         traffic_in=0, traffic_out=100, traffic_period_start=0,
+                         traffic_period_date=today.isoformat())
+        self.create_user(777024, status=UserStatus.ACTIVE, device_os='Android',
+                         traffic_in=0, traffic_out=limit_mb * 2)
         main.vpn_manager.get_user_traffic = AsyncMock(return_value={"uplink": 0, "downlink": 50 * 1000000})
         monitor = NodeMonitor(main.vpn_manager, main.user_manager, main.vpn_bot)
         await monitor._router_quota()
-        self.assertEqual(self.get_user(777021).status, UserStatus.INACTIVE)  # 10 МБ запаса − 50 МБ
-        self.assertEqual(self.get_user(777022).status, UserStatus.ACTIVE)
-        main.vpn_manager.remove_client_from_xray.assert_awaited_once_with(777021)
+        main.vpn_manager.remove_client_from_xray.assert_awaited_once_with(777021)  # 10 МБ запаса − 50 МБ
+        self.assertEqual(self.get_user(777021).status, UserStatus.ACTIVE)  # оплачено — закрыт только роутер
+        self.assertTrue(self.get_user(777021).router_quota_exhausted())
+
+        await monitor._router_quota()  # повторный цикл не шлёт сообщение снова
+        main.vpn_manager.remove_client_from_xray.assert_awaited_once()
+
+        old = (today - timedelta(days=settings.ROUTER_PERIOD_DAYS)).isoformat()
+        main.user_manager.update_user(777021, traffic_period_date=old)
+        main.vpn_manager.setup_xray.reset_mock()
+        await monitor._router_quota()
+        main.vpn_manager.setup_xray.assert_awaited_once()
+        user = self.get_user(777021)
+        self.assertEqual(user.traffic_period_date, today.isoformat())
+        self.assertFalse(user.router_quota_exhausted())
 
     async def test_repeat_press_reuses_unpaid_link_within_window(self):
         # 05.10.26: 4 ссылки за 8 минут, оплачены две

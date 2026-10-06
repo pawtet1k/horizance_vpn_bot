@@ -31,7 +31,6 @@ async def send_vpn_setup_rejection_msg(vpn_bot, user_id):
 PLAN_OPTIONS = [
     (settings.default_price, "Месяц", "select_plan_month"),
     (settings.yearly_price, f"Год (−{settings.yearly_discount_percent}%)", "select_plan_year"),
-    (settings.router_price, f"Роутер ({settings.ROUTER_TRAFFIC_LIMIT_GB} ГБ/мес)", "select_plan_router"),
 ]
 
 
@@ -242,21 +241,43 @@ _vpn_setup_locks: dict[int, asyncio.Lock] = {}
 async def finish_vpn_setup(
     vpn_bot, user_id, device_os, user_manager, vpn_manager
 ):
-    user_manager.update_user(user_id, device_os=device_os)
     app_url = await set_and_send_app_url(vpn_bot, user_id, device_os)
+    to_router = device_os == settings.ROUTER_DEVICE
 
     lock = _vpn_setup_locks.setdefault(user_id, asyncio.Lock())
     async with lock:
         user = user_manager.get_user(user_id)
+        if to_router and user.router_quota_exhausted():
+            await vpn_bot.send_message(
+                user_id,
+                f"Лимит роутера — {settings.ROUTER_TRAFFIC_LIMIT_GB} ГБ за {settings.ROUTER_PERIOD_DAYS} дней — "
+                f"исчерпан. Роутер снова заработает {user.router_window_end():%d.%m}.\n\n"
+                "Телефон или компьютер можно подключить и сейчас: /config → ваше устройство."
+            )
+            return
+        # Ссылка у человека одна: или обычная (устройства по hwid, не больше трёх), или роутерная (без
+        # счёта устройств, с лимитом трафика). Смена режима — новый uuid; setup_xray снимает старый из
+        # xray (rmu по email = user_id), и прежняя ссылка перестаёт работать.
+        switched = bool(user.client_uuid) and (user.device_os == settings.ROUTER_DEVICE) != to_router
+        if switched:
+            logger.warning(f"{user_id}: смена режима {user.device_os} → {device_os}, выдаём новый uuid")
+            user.client_uuid = None
+        updates = dict(device_os=device_os)
+        if to_router and not user.traffic_period_date:
+            # первое окно лимита; дальше окна двигает node_monitor, повторный выбор роутера их не сбрасывает
+            updates.update(traffic_period_start=user.traffic_total_mb(),
+                           traffic_period_date=datetime.now().date().isoformat())
         client_uuid = await vpn_manager.setup_xray(user)
-        user_manager.update_user(user_id, client_uuid=client_uuid)
-#   await vpn_bot.send_message(user_id,
-#       f"Ваш VPN на стороне сервера успешно настроен!\n\n",
-#       parse_mode="html", link_preview=False
-#   )
+        user_manager.update_user(user_id, client_uuid=client_uuid, **updates)
 
+    note = ""
+    if switched:
+        note = ("\n\n⚠️ Ссылка у вас одна: прежняя ссылка для телефонов и компьютеров больше не работает. "
+                "Вернуться — /config → ваше устройство." if to_router else
+                "\n\n⚠️ Ссылка у вас одна: роутерная ссылка больше не работает. "
+                "Вернуться — /config → «Роутер».")
     await set_and_send_client_link(
-        vpn_bot, user_id, client_uuid, app_url, device_os
+        vpn_bot, user_id, client_uuid, app_url, device_os, note
     )
 
 async def start_vpn_setup(vpn_bot, user_id, user_manager, vpn_manager):
@@ -274,7 +295,7 @@ async def set_and_send_app_url(vpn_bot, user_id, device_os):
     return app_url
 
 async def set_and_send_client_link(
-    vpn_bot, user_id, client_uuid, app_url, device_os=None
+    vpn_bot, user_id, client_uuid, app_url, device_os=None, note=""
 ):
     client_link = f"https://{credentials.SUBSCRIPTION_DOMAIN}/vpn/{client_uuid}" #vpn_manager.generate_settings_link(client_uuid)
     # Адрес подписки в чистом виде. /vpn/<uuid> открывает Happ по
@@ -284,6 +305,20 @@ async def set_and_send_client_link(
     # понимают все клиенты, поэтому на iOS даём его сразу, а не после
     # обращения в поддержку.
     sub_link = f"https://{credentials.SUBSCRIPTION_DOMAIN}/sub/{client_uuid}"
+
+    if device_os == settings.ROUTER_DEVICE:
+        await vpn_bot.send_message(
+            user_id,
+            "🛜 **VPN на роутере**\n\n"
+            "Адрес подписки для роутера:\n"
+            f"`{sub_link}`\n\n"
+            "Добавьте его в VPN-клиент роутера как подписку — нужна прошивка с поддержкой VLESS Reality.\n\n"
+            "Через VPN работают все устройства в сети роутера, их число не ограничено. "
+            f"Лимит трафика — {settings.ROUTER_TRAFFIC_LIMIT_GB} ГБ за {settings.ROUTER_PERIOD_DAYS} дней."
+            f"{note}",
+            link_preview=False,
+        )
+        return
 
     if device_os == "TV":
         # На телевизоре Telegram не нужен: ссылку получают здесь, на телефоне,
@@ -299,7 +334,8 @@ async def set_and_send_client_link(
             f"`{sub_link}`\n\n"
             "Если Happ уже стоит на телефоне с нашей подпиской, можно проще: "
             "отсканируйте телефоном QR-код, который Happ показывает на телевизоре при первом запуске.\n\n"
-            "Подробная инструкция: https://horizancevpn.com/tv",
+            "Подробная инструкция: https://horizancevpn.com/tv"
+            f"{note}",
             link_preview=False,
         )
         return
@@ -323,7 +359,7 @@ async def set_and_send_client_link(
         f"2. Кликните по ссылке:\n[🔗 Ваша личная конфигурация]({client_link})\n\n"
         f"⚠️ При возникновении ошибки попробуйте вставить эту ссылку в поисковую строку браузера вашего устройства\n\n"
         "3. Выберите в Happ любой из доступных серверов и нажмите на кнопку подключения 🔘"
-        f"{ios_hint}",
+        f"{ios_hint}{note}",
         file='hero.jpg'
     )
     #await event.respond(f"[Нажмите на меня]({client_link})", link_preview=False, parse_mode='md')
@@ -439,7 +475,8 @@ async def resolve_device_os(vpn_bot, user_id):
     os_keys = list(settings.VPN_CLIENT_DOWNLOAD_URLS.keys())
     keyboard = [
         [Button.inline(os_keys[i], data=os_keys[i]) for i in range(2)],
-        [Button.inline(os_keys[i], data=os_keys[i]) for i in range(2, len(os_keys))]
+        [Button.inline(os_keys[i], data=os_keys[i]) for i in range(2, len(os_keys))],
+        [Button.inline(settings.ROUTER_LABEL, data=settings.ROUTER_DEVICE)],
     ]
 
     await vpn_bot.send_message(
