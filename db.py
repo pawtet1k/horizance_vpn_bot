@@ -2,6 +2,7 @@ import sqlite3
 from models import User, TrialUser, WebUser, trial_expired
 from datetime import datetime, timezone
 import credentials
+import settings
 from my_logger import logger
 
 
@@ -52,6 +53,7 @@ class UserManager:
         fingerprint TEXT,
         traffic_in INTEGER,
         traffic_out INTEGER,
+        traffic_period_start INTEGER,
         notifications TEXT
     '''
 
@@ -82,6 +84,11 @@ class UserManager:
             )
         except sqlite3.OperationalError:
             pass  # столбец уже существует у ранее созданной таблицы
+        for table in ("users", "web_users"):
+            try:
+                self.execute_query(f"ALTER TABLE {table} ADD COLUMN traffic_period_start INTEGER")
+            except sqlite3.OperationalError:
+                pass  # столбец уже есть (или web_users ещё не создана — тогда он в CREATE)
         self.create_trial_table()
         self.create_web_users_table()
         self.create_payment_orders_table()
@@ -195,6 +202,23 @@ class UserManager:
             f'Поиск по pending_order_uid={order_uid}: {"успешно" if row else "не найден"}'
         )
         return User(**dict(row)) if row else None
+
+    def get_active_router_users(self):
+        rows = self.execute_query(
+            "SELECT * FROM users WHERE status = 'active' AND price = ?", (settings.router_price,), fetchall=True
+        )
+        return [User(**dict(r)) for r in rows or []]
+
+    def add_traffic(self, user_id, delta_in_mb: int, delta_out_mb: int) -> int:
+        """Прибавляет снятый с нод трафик и возвращает итог in+out в МБ."""
+        self.execute_query(
+            "UPDATE users SET traffic_in = COALESCE(traffic_in, 0) + ?, "
+            "traffic_out = COALESCE(traffic_out, 0) + ? WHERE user_id = ?",
+            (delta_in_mb, delta_out_mb, user_id))
+        row = self.execute_query(
+            "SELECT COALESCE(traffic_in, 0) + COALESCE(traffic_out, 0) AS total FROM users WHERE user_id = ?",
+            (user_id,), fetchone=True)
+        return row["total"] if row else 0
 
     def count_active_users(self) -> int:
         query = "SELECT COUNT(*) AS n FROM users WHERE status = 'active'"

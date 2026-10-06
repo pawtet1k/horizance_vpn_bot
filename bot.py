@@ -31,6 +31,7 @@ async def send_vpn_setup_rejection_msg(vpn_bot, user_id):
 PLAN_OPTIONS = [
     (settings.default_price, "Месяц", "select_plan_month"),
     (settings.yearly_price, f"Год (−{settings.yearly_discount_percent}%)", "select_plan_year"),
+    (settings.router_price, f"Роутер ({settings.ROUTER_TRAFFIC_LIMIT_GB} ГБ/мес)", "select_plan_router"),
 ]
 
 

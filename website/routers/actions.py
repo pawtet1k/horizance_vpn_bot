@@ -82,6 +82,7 @@ async def api_subscription(request: Request):
 PLAN_PRICES = {
     "month": settings.default_price,
     "year": settings.yearly_price,
+    "router": settings.router_price,
 }
 
 

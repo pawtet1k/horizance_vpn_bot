@@ -200,6 +200,15 @@ async def select_plan_year(event):
         user_manager, subscription_manager
     )
 
+@vpn_bot.on(events.CallbackQuery(data="select_plan_router"))
+@safe_handler
+async def select_plan_router(event):
+    logging_command(event.sender.id)
+    await bot.callback_select_plan(
+        vpn_bot, event.sender.id, settings.router_price,
+        user_manager, subscription_manager
+    )
+
 @vpn_bot.on(events.CallbackQuery(data="change_plan"))
 @safe_handler
 async def change_plan(event):
@@ -250,7 +259,7 @@ async def main():
             settings.VPN_CLIENT_DOWNLOAD_URLS,
         ))
         asyncio.create_task(utils.ping(vpn_bot))
-        asyncio.create_task(NodeMonitor(vpn_manager, user_manager).run())
+        asyncio.create_task(NodeMonitor(vpn_manager, user_manager, vpn_bot).run())
         logger.info('--------------------------------------------------------')
         logger.info('Клиент telethon запущен.')
         await vpn_bot.run_until_disconnected()

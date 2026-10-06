@@ -30,7 +30,7 @@ import asyncssh
 import credentials
 import device_guard
 import settings
-from models import trial_expired
+from models import UserStatus, trial_expired
 from my_logger import logger
 from restore_users import clients_to_restore
 from utils import send_email
@@ -58,9 +58,10 @@ _WATCHDOG_SCRIPT = (
 
 
 class NodeMonitor:
-    def __init__(self, vpn_manager, user_manager):
+    def __init__(self, vpn_manager, user_manager, vpn_bot=None):
         self.vpn = vpn_manager
         self.users = user_manager
+        self.bot = vpn_bot
         self._fails: dict[str, int] = {}
         self._down_alerted: set[str] = set()
         self._net: dict[str, tuple[int, int, float]] = {}
@@ -69,6 +70,34 @@ class NodeMonitor:
         self._records_path = Path(settings.NODE_TRAFFIC_RECORDS_PATH)
 
     # ---------- общее ----------
+
+    async def _router_quota(self) -> None:
+        """Месячный лимит роутерного тарифа. Роутер может вообще не ходить за /sub (там копится трафик
+        остальных), поэтому у роутеров трафик снимаем здесь, раз в цикл, и при превышении закрываем
+        доступ до следующей оплаты — оплата заново запускает отсчёт (activate_paid_subscription)."""
+        limit_mb = settings.ROUTER_TRAFFIC_LIMIT_GB * 1024
+        for user in self.users.get_active_router_users():
+            try:
+                t = await self.vpn.get_user_traffic(str(user.user_id), reset=True)
+            except Exception as e:
+                logger.error(f"node_monitor: трафик роутера {user.user_id} не снят: {e}")
+                continue
+            total = self.users.add_traffic(user.user_id, t["uplink"] // 1000000, t["downlink"] // 1000000)
+            used = total - (user.traffic_period_start or 0)
+            if used <= limit_mb:
+                continue
+            await self.vpn.remove_client_from_xray(user.user_id)
+            self.users.update_user(user.user_id, status=UserStatus.INACTIVE)
+            logger.warning(f"{user.user_id}: роутерный лимит {settings.ROUTER_TRAFFIC_LIMIT_GB} ГБ исчерпан "
+                           f"({used // 1024} ГБ), доступ закрыт до оплаты")
+            if self.bot:
+                try:
+                    await self.bot.send_message(
+                        user.user_id,
+                        f"Лимит роутерной подписки — {settings.ROUTER_TRAFFIC_LIMIT_GB} ГБ в месяц — исчерпан, "
+                        "доступ приостановлен. Чтобы продолжить, оплатите следующий месяц: /pay")
+                except Exception as e:
+                    logger.error(f"{user.user_id}: не удалось сообщить о лимите: {e}")
 
     def _alert(self, key: str, subject: str, body: str) -> None:
         now = time.time()
@@ -274,6 +303,7 @@ class NodeMonitor:
                     return_exceptions=True,
                 )
                 await self._watchdog([r for r in per_node if isinstance(r, dict)])
+                await self._router_quota()
                 if self._load:
                     # одна строка на цикл: история нагрузки нод
                     logger.info(

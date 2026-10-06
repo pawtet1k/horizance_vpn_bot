@@ -58,6 +58,8 @@ def _subscription_defaults() -> dict:
         'fingerprint': None,
         'traffic_in': None,
         'traffic_out': None,
+        # трафик (МБ, in+out) на момент последней оплаты роутерного тарифа — от него считается месячный лимит
+        'traffic_period_start': None,
         'notifications': None
     }
 

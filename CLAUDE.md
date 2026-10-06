@@ -44,7 +44,7 @@ Never print or log the contents of this file.
 
 `test.py` mocks `db.UserManager.DB_NAME` to `test_users.db` and `settings.XRAY_CONFIG_PATH` to
 `test_config.json` before running, and drives handlers directly (no real Telethon dispatcher/connection).
-All 83 tests currently pass (last verified 2026-10-05). test.py sets `HORIZANCE_LOG_DIR` to a temp dir before importing the project, so tests no longer write into the production `my_logger/` (older prod log lines with ids 333001, 444001, 777xxx, 888xxx or node "DE 10.0.0.1" came from tests before 2026-09-26). Two behavior notes worth knowing before "fixing" a future failure here:
+All 85 tests currently pass (last verified 2026-10-06). test.py sets `HORIZANCE_LOG_DIR` to a temp dir before importing the project, so tests no longer write into the production `my_logger/` (older prod log lines with ids 333001, 444001, 777xxx, 888xxx or node "DE 10.0.0.1" came from tests before 2026-09-26). Two behavior notes worth knowing before "fixing" a future failure here:
 `start_vpn_setup` always re-prompts for device OS via `/config` (or the `generate_settings_link` button)
 even if `device_os` was already saved from a previous run — there's no "skip prompt, just reprovision"
 path, by design; and the promo free-trial-extension keyword checked in `main.handle_message` is the

@@ -562,24 +562,26 @@
   <span>Чат</span>
 </button>
 <script>
-  /* Одна кнопка на экране: своя «Чат». Собственный значок tawk.to скрыт всегда (hideWidget) — окно чата
-     показывается только раскрытым и при сворачивании прячется целиком, а своя кнопка возвращается.
-     06.10.26: раньше свою кнопку только удаляли в onLoad, и владелец видел обе (синюю и зелёную). */
+  /* Одна кнопка на экране — своя «Чат». Значок tawk.to не рисуется вообще (hideWidget в onBeforeLoad);
+     окно раскрывается скрытым и показывается только уже раскрытым (onChatMaximized) — иначе на ~0,8 с
+     мелькал зелёный значок (06.10.26). При сворачивании прячется целиком, своя кнопка возвращается. */
   (function () {
     var btn = document.getElementById('hz-chat-btn'), KEY = 'hz_chat_opened', state = 'idle', wantOpen = false;
     function openChat() {
       btn.style.display = 'none';
-      Tawk_API.showWidget(); Tawk_API.maximize();
+      Tawk_API.maximize();          // раскрываем, пока виджет скрыт…
     }
     function load() {
       state = 'loading';
       window.Tawk_API = window.Tawk_API || {};
       window.Tawk_LoadStart = new Date();
+      Tawk_API.onBeforeLoad = function () { Tawk_API.hideWidget(); };   // значок не рисуется вообще
       Tawk_API.onLoad = function () {
         state = 'ready';
         btn.removeAttribute('aria-busy');
-        if (wantOpen) openChat(); else Tawk_API.hideWidget();
+        if (wantOpen) openChat();
       };
+      Tawk_API.onChatMaximized = function () { Tawk_API.showWidget(); };  // …и показываем уже раскрытым
       Tawk_API.onChatMinimized = function () { Tawk_API.hideWidget(); btn.style.display = ''; };
       Tawk_API.onChatStarted = function () { if (window.hzT) hzT('chat_started'); };
       var s = document.createElement('script');
@@ -595,7 +597,6 @@
       if (state === 'ready') openChat();
       else { btn.setAttribute('aria-busy', 'true'); if (state === 'idle') load(); }
     });
-    // кто открывал чат в последние 24 ч — подгружаем заранее (скрытым), чтобы переписка была под рукой
     var last = 0;
     try { last = +localStorage.getItem(KEY) || 0; } catch (e) {}
     if (Date.now() - last < 24 * 3600 * 1000) load();

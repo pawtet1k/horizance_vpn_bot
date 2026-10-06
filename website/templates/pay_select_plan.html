@@ -21,8 +21,11 @@
        class="bg-surface border border-line2 rounded-2xl p-6
               flex flex-col items-start gap-1
               transition-all duration-150 hover:border-faint hover:bg-surface2">
-      <span class="text-sm font-semibold text-dim">{{ 'Месяц' if plan == 'month' else 'Год' }}</span>
+      <span class="text-sm font-semibold text-dim">{{ {'month': 'Месяц', 'year': 'Год', 'router': 'Роутер'}[plan] }}</span>
       <span class="text-2xl font-extrabold text-ink">{{ price }}&nbsp;₽</span>
+      {% if plan == 'router' %}
+      <span class="text-sm text-dim">Для роутера: все устройства дома, до {{ settings.ROUTER_TRAFFIC_LIMIT_GB }}&nbsp;ГБ в месяц</span>
+      {% endif %}
       {% if plan == 'year' %}
       <span class="text-sm font-semibold text-accent">−{{ settings.yearly_discount_percent }}%: выгода {{ settings.yearly_saving_rub }}&nbsp;₽ против помесячной оплаты</span>
       {% endif %}

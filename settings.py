@@ -88,6 +88,11 @@ TELEGRAM_APP_URLS: dict[str, str] = {
 
 default_price = 99
 yearly_price = 999
+# Подписка для роутера (06.10.26): та же подписка, но без счёта устройств (роутер не шлёт hwid) и с лимитом
+# трафика в месяц — им и ограничивается «кафе на 1000 человек»: лимит кончится за часы, доступ закроется
+# до следующей оплаты. Безлимитного роутерного тарифа нет намеренно.
+router_price = 199
+ROUTER_TRAFFIC_LIMIT_GB = 300
 # Выгода годовой подписки против 12 месячных — показывается при выборе тарифа (06.10.26: годовую почти
 # не выбирали, потому что в момент выбора выгоды не было видно).
 yearly_saving_rub = default_price * 12 - yearly_price
@@ -156,6 +161,7 @@ UDMPAY_SANDBOX = False
 PLAN_PERIOD_DAYS = {
     default_price: subscription_period,
     yearly_price: yearly_subscription_period,
+    router_price: subscription_period,
 }
 
 # На сколько "периодов" (месяцев) продвигать paid_periods за один платёж -
@@ -164,6 +170,7 @@ PLAN_PERIOD_DAYS = {
 PLAN_PERIODS_INCREMENT = {
     default_price: 1,
     yearly_price: 12,
+    router_price: 1,
 }
 
 
@@ -196,6 +203,7 @@ NOWPAYMENTS_ENABLED = True
 CRYPTO_PRICE_USD = {
     default_price: 1.8,
     yearly_price: 11.9,
+    router_price: 3.6,
 }
 
 
@@ -217,6 +225,7 @@ def get_crypto_price_usd(price: int) -> int:
 # выбор оставлен открытым - см. get_crypto_pay_currency().
 CRYPTO_PAY_CURRENCY = {
     default_price: "usdtbsc",
+    router_price: "usdtbsc",
     # yearly_price: не задано намеренно - выбор открыт (см. docstring выше)
 }
 
