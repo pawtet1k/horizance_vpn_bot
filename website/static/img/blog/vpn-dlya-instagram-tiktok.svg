@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" role="img">
+
+  <defs>
+    <linearGradient id="hzg" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#5ea0ff"/><stop offset="1" stop-color="#1246b8"/>
+    </linearGradient>
+    <linearGradient id="hzc" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#22d3ee"/><stop offset="1" stop-color="#2563eb"/>
+    </linearGradient>
+    <radialGradient id="glow1" cx="0.5" cy="0.5" r="0.5">
+      <stop stop-color="#2563eb" stop-opacity="0.34"/><stop offset="1" stop-color="#2563eb" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow2" cx="0.5" cy="0.5" r="0.5">
+      <stop stop-color="#22d3ee" stop-opacity="0.22"/><stop offset="1" stop-color="#22d3ee" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="sunglow" cx="0.5" cy="1" r="1">
+      <stop stop-color="#5ea0ff" stop-opacity="0.5"/><stop offset="1" stop-color="#5ea0ff" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M48 0H0V48" fill="none" stroke="#1c2537" stroke-width="1" opacity="0.55"/>
+    </pattern>
+    <linearGradient id="streak" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#5ea0ff" stop-opacity="0"/>
+      <stop offset="0.22" stop-color="#5ea0ff" stop-opacity="0.9"/>
+      <stop offset="0.62" stop-color="#22d3ee" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#22d3ee" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="ig" x1="0" y1="1" x2="1" y2="0">
+      <stop stop-color="#feda75"/><stop offset="0.3" stop-color="#fa7e1e"/>
+      <stop offset="0.6" stop-color="#d62976"/><stop offset="1" stop-color="#962fbf"/>
+    </linearGradient>
+    <linearGradient id="tg" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#2aabee"/><stop offset="1" stop-color="#229ed9"/>
+    </linearGradient>
+    
+  </defs>
+
+
+  <rect width="1200" height="675" fill="#0d0d0d"/>
+  <rect width="1200" height="675" fill="url(#grid)"/>
+  <ellipse cx="240" cy="120" rx="520" ry="340" fill="url(#glow1)"/>
+  <ellipse cx="1030" cy="240" rx="440" ry="320" fill="url(#glow2)"/>
+
+
+  
+  <text x="600" y="150" text-anchor="middle" font-family="'Inter','Segoe UI',system-ui,-apple-system,sans-serif" font-size="19"
+        font-weight="600" fill="#22d3ee" letter-spacing="7">ДОСТУП К СОЦСЕТЯМ</text>
+
+  
+  <g transform="translate(480,310)">
+    <rect x="-85.0" y="-85.0" width="170" height="170" rx="47.6" fill="none"
+          stroke="url(#ig)" stroke-width="12.75"/>
+    <circle r="37.4" fill="none" stroke="url(#ig)" stroke-width="12.75"/>
+    <circle cx="47.6" cy="-47.6" r="9.35" fill="url(#ig)"/>
+  </g>
+
+  
+  <g transform="translate(740,310)">
+    <rect x="-80.6" y="-80.6" width="161.2" height="161.2" rx="36.400000000000006" fill="#101014" stroke="#2c2c2c" stroke-width="2"/>
+    <g transform="scale(1.3541666666666667)">
+      <path d="M8 -34 c10 5 16 8 26 8 v14 c-10 0 -18 -3 -26 -7 v26 a20 20 0 1 1 -14 -19 v15 a7 7 0 1 0 0 13 z" fill="#25F4EE" transform="translate(-4,-3)"/>
+      <path d="M8 -34 c10 5 16 8 26 8 v14 c-10 0 -18 -3 -26 -7 v26 a20 20 0 1 1 -14 -19 v15 a7 7 0 1 0 0 13 z" fill="#FE2C55" transform="translate(4,3)"/>
+      <path d="M8 -34 c10 5 16 8 26 8 v14 c-10 0 -18 -3 -26 -7 v26 a20 20 0 1 1 -14 -19 v15 a7 7 0 1 0 0 13 z" fill="#ffffff"/>
+    </g>
+  </g>
+
+  <text x="600" y="528" text-anchor="middle" font-family="'Inter','Segoe UI',system-ui,-apple-system,sans-serif" font-size="52" font-weight="800" fill="#f0f0f0" letter-spacing="1.5">VPN ДЛЯ INSTAGRAM И TIKTOK</text>
+
+
+  <!-- свечение горизонта -->
+  <ellipse cx="600" cy="610" rx="620" ry="140" fill="url(#sunglow)" opacity="0.55"/>
+  <g stroke-linecap="round" fill="none">
+    <path d="M70 592 H1130" stroke="url(#streak)" stroke-width="3.5"/>
+    <path d="M250 624 H950" stroke="url(#streak)" stroke-width="2" opacity="0.5"/>
+  </g>
+  <!-- редкие «звёзды» над горизонтом -->
+  <g fill="#5ea0ff">
+    <circle cx="150" cy="560" r="2.5" opacity="0.5"/>
+    <circle cx="1055" cy="552" r="2.5" opacity="0.55"/>
+    <circle cx="890" cy="580" r="2" opacity="0.35"/>
+    <circle cx="310" cy="578" r="2" opacity="0.35"/>
+  </g>
+
+
+  <g transform="translate(46,40)">
+    <g transform="scale(0.30)">
+      <g stroke="url(#hzg)" stroke-width="7" stroke-linecap="round" fill="none">
+        <line x1="59.7" y1="19.4" x2="59.7" y2="3.9"/>
+        <line x1="37.8" y1="25.5" x2="29.8" y2="11.9"/>
+        <line x1="81.6" y1="25.5" x2="89.6" y2="11.9"/>
+        <line x1="22.0" y1="41.7" x2="8.3" y2="34.1"/>
+        <line x1="97.4" y1="41.7" x2="111.1" y2="34.1"/>
+        <path d="M25.2 62.5 A34.4 34.4 0 0 1 94.0 62.5" stroke-width="7.5"/>
+        <path d="M8.3 62.5 H111.1"/>
+        <path d="M8.3 62.5 A51.4 53.8 0 0 0 111.1 62.5"/>
+        <path d="M15.9 90 H103.5"/>
+        <line x1="59.7" y1="62.5" x2="59.7" y2="115.8"/>
+        <path d="M32.2 62.5 A27.5 53.3 0 0 0 87.2 62.5"/>
+      </g>
+    </g>
+    <text x="48" y="24" font-family="'Inter','Segoe UI',system-ui,-apple-system,sans-serif" font-size="17" font-weight="700"
+          fill="#e8e8e8" letter-spacing="2.5">HORIZANCE<tspan fill="#5ea0ff"> · БЛОГ</tspan></text>
+  </g>
+
+</svg>

@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — Horizance VPN{% endblock %}
+{% block meta_description %}{{ title }} — личный кабинет Horizance VPN.{% endblock %}
+
+{% block content %}
+<section class="max-w-2xl mx-auto px-6 py-12">
+
+  <a href="/dashboard" class="text-dim text-sm hover:text-ink transition-colors mb-6 inline-flex items-center gap-2">
+    <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> В личный кабинет
+  </a>
+
+  <h1 class="text-2xl font-bold tracking-tight mb-6">{{ title }}</h1>
+
+  {% if messages %}
+    {% for message_html in messages %}
+    <div class="bg-surface border border-line rounded-2xl p-6 mb-4 leading-relaxed text-ink2">
+      {{ message_html | safe }}
+    </div>
+    {% endfor %}
+    {% if retry_url %}
+    <a href="{{ retry_url }}" data-busy="payment"
+       class="mt-2 w-full bg-white text-black font-semibold rounded-xl py-4
+              inline-flex items-center justify-center gap-2
+              transition-opacity duration-150 hover:opacity-90">
+      <i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i> Попробовать ещё раз
+    </a>
+    {% endif %}
+  {% else %}
+    <div class="bg-surface border border-line rounded-2xl p-6 text-dim text-sm">
+      Нет новых сообщений.
+    </div>
+  {% endif %}
+
+</section>
+{% endblock %}

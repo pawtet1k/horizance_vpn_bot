@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+Disallow: /auth
+Disallow: /dashboard
+Disallow: /pay
+Disallow: /config
+Disallow: /invite_friend
+Disallow: /vpn/
+Disallow: /sub/
+Disallow: /go/
+
+Sitemap: https://horizancevpn.com/sitemap.xml

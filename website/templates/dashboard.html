@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+
+{# ═══════════════════════════════════════════════════════════════
+   DASHBOARD.HTML — личный кабинет (доступен только после логина)
+   Кнопки бота переведены в GET-эндпойнты фронтенда:
+     start         → AJAX GET /api/subscription  (статус подписки, при загрузке)
+     pay           → переход на /pay             (только из ЛК)
+     config        → переход на /config          (только из ЛК)
+     invite_friend → переход на /invite_friend   (только из ЛК)
+     qr_code       → переход на /qr_code          (публичный, доступен и из ЛК)
+     help          → переход на /help             (публичный, доступен и из ЛК)
+   ═══════════════════════════════════════════════════════════════ #}
+
+{% block title %}Личный кабинет — Horizance VPN{% endblock %}
+{% block meta_description %}Управление подпиской Horizance VPN: оплата, настройка конфигурации, приглашение друзей.{% endblock %}
+{% block canonical %}https://horizancevpn.com/dashboard{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
+
+{% block content %}
+<section class="max-w-3xl mx-auto px-6 py-12">
+
+  <h1 class="text-2xl font-bold tracking-tight mb-1">Личный кабинет</h1>
+  <p class="text-dim text-sm mb-8">{{ user_name | default('Подписчик Horizance') }}</p>
+
+  <!-- ═══ Блок статуса подписки — наполняется AJAX-вызовом /api/subscription (бывшая команда "start") ═══ -->
+  <div id="subscription-card"
+       class="bg-surface border border-line rounded-2xl p-6 mb-8"
+       aria-live="polite">
+    <div id="subscription-loading" class="flex items-center gap-3 text-dim text-sm">
+      <span class="w-4 h-4 border-2 border-mute border-t-transparent rounded-full animate-spin" aria-hidden="true"></span>
+      Загружаем статус подписки…
+    </div>
+    <div id="subscription-content" class="hidden"></div>
+    <div id="subscription-error" class="hidden text-sm text-rose-400">
+      Не удалось загрузить статус подписки. Попробуйте обновить страницу.
+    </div>
+  </div>
+
+  <!-- ═══ Кнопки личного кабинета: pay / config / invite_friend — доступны только здесь ═══ -->
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+
+    <a href="/pay"
+       class="bg-surface2 border border-line2 hover:border-faint rounded-2xl p-5 flex items-center gap-4 transition-colors">
+      <i class="fa-solid fa-credit-card text-primary text-xl" aria-hidden="true"></i>
+      <div>
+        <div class="font-semibold text-ink2 text-sm">Подключить оплату</div>
+        <div class="text-xs text-faint">Оплатить или продлить подписку</div>
+      </div>
+    </a>
+
+    <a href="/config"
+       class="bg-surface2 border border-line2 hover:border-faint rounded-2xl p-5 flex items-center gap-4 transition-colors">
+      <i class="fa-solid fa-sliders text-primary text-xl" aria-hidden="true"></i>
+      <div>
+        <div class="font-semibold text-ink2 text-sm">Настроить VPN</div>
+        <div class="text-xs text-faint">Ссылка для подключения устройства</div>
+      </div>
+    </a>
+
+    <a href="/invite_friend"
+       class="bg-surface2 border border-line2 hover:border-faint rounded-2xl p-5 flex items-center gap-4 transition-colors">
+      <i class="fa-solid fa-user-plus text-primary text-xl" aria-hidden="true"></i>
+      <div>
+        <div class="font-semibold text-ink2 text-sm">Пригласить друга</div>
+        <div class="text-xs text-faint">Реферальная ссылка и бонусы</div>
+      </div>
+    </a>
+  </div>
+
+  <!-- ═══ Кнопки, доступные и публично, и из ЛК: qr_code, help ═══ -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+    <a href="/qr_code"
+       class="bg-surface2 border border-line2 hover:border-faint rounded-2xl p-5 flex items-center gap-4 transition-colors">
+      <i class="fa-solid fa-qrcode text-primary text-xl" aria-hidden="true"></i>
+      <div>
+        <div class="font-semibold text-ink2 text-sm">QR-код на бота</div>
+        <div class="text-xs text-faint">Быстрый доступ с другого устройства</div>
+      </div>
+    </a>
+
+    <a href="/help"
+       class="bg-surface2 border border-line2 hover:border-faint rounded-2xl p-5 flex items-center gap-4 transition-colors">
+      <i class="fa-solid fa-headset text-primary text-xl" aria-hidden="true"></i>
+      <div>
+        <div class="font-semibold text-ink2 text-sm">Написать в поддержку</div>
+        <div class="text-xs text-faint">Ответим в Telegram</div>
+      </div>
+    </a>
+  </div>
+
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<!-- ═══════════════ JS дэшборда: одна задача — одна функция (SRP), без inline-обработчиков ═══════════════ -->
+<script>
+"use strict";
+
+/**
+ * Запрашивает статус подписки текущего пользователя.
+ * Аналог команды бота "start" — выполняется AJAX-ом при загрузке дэшборда.
+ * @returns {Promise<SubscriptionStatus>}
+ */
+async function fetchSubscriptionStatus() {
+  const response = await fetch("/api/subscription", {
+    method: "GET",
+    credentials: "include",
+    headers: { "Accept": "application/json" }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Subscription request failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Форматирует дату окончания подписки в локализованный вид.
+ * @param {string} isoDate
+ * @returns {string}
+ */
+function formatExpiryDate(isoDate) {
+  const date = new Date(isoDate);
+  return date.toLocaleDateString("ru-RU", {
+    day: "numeric",
+    month: "long",
+    year: "numeric"
+  });
+}
+
+/**
+ * Строит DOM карточки подписки из данных API (без innerHTML — через
+ * textContent/createElement, чтобы разметка была совместима с Trusted Types
+ * без дополнительной политики санитайзинга).
+ * @param {SubscriptionStatus} data
+ * @returns {HTMLElement}
+ */
+function renderSubscriptionCard(data) {
+  const statusColor = data.is_active ? "text-emerald-400" : "text-rose-400";
+  const expiryText = data.expires_at
+    ? `до ${formatExpiryDate(data.expires_at)}`
+    : "без активной подписки";
+  const autoRenewColor = data.auto_renew ? "text-emerald-400" : "text-rose-400";
+  const autoRenewText = data.auto_renew ? "настроено" : "не настроено";
+
+  const card = document.createElement("div");
+
+  const statusCaption = document.createElement("div");
+  statusCaption.className = "text-xs text-dim mb-1";
+  statusCaption.textContent = "Статус подписки";
+  card.appendChild(statusCaption);
+
+  const statusValue = document.createElement("div");
+  statusValue.className = `font-semibold ${statusColor}`;
+  statusValue.textContent = data.status_label;
+  card.appendChild(statusValue);
+
+  const expiry = document.createElement("div");
+  expiry.className = "text-xs text-faint mt-1";
+  expiry.textContent = expiryText;
+  card.appendChild(expiry);
+
+  const renewRow = document.createElement("div");
+  renewRow.className = "text-xs text-faint mt-2";
+  renewRow.append("Продление подписки: ");
+  const renewValue = document.createElement("span");
+  renewValue.className = `font-semibold ${autoRenewColor}`;
+  renewValue.textContent = autoRenewText;
+  renewRow.appendChild(renewValue);
+  card.appendChild(renewRow);
+
+  return card;
+}
+
+/**
+ * Переключает видимые состояния карточки подписки
+ * (загрузка / контент / ошибка) — единая точка управления DOM.
+ * @param {"loading"|"content"|"error"} state
+ */
+function setSubscriptionViewState(state) {
+  const loadingEl = document.getElementById("subscription-loading");
+  const contentEl = document.getElementById("subscription-content");
+  const errorEl = document.getElementById("subscription-error");
+
+  loadingEl.classList.toggle("hidden", state !== "loading");
+  contentEl.classList.toggle("hidden", state !== "content");
+  errorEl.classList.toggle("hidden", state !== "error");
+}
+
+/**
+ * Точка входа: загружает статус подписки и отображает результат.
+ * Вызывается один раз при готовности DOM.
+ */
+async function initDashboard() {
+  try {
+    const status = await fetchSubscriptionStatus();
+    const contentEl = document.getElementById("subscription-content");
+    contentEl.replaceChildren(renderSubscriptionCard(status));
+    setSubscriptionViewState("content");
+  } catch (error) {
+    console.error("Subscription fetch error:", error);
+    setSubscriptionViewState("error");
+  }
+}
+
+document.addEventListener("DOMContentLoaded", initDashboard);
+</script>
+{% endblock %}

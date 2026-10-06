@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block title %}Политика конфиденциальности — Horizance VPN{% endblock %}
+{% block meta_description %}Политика конфиденциальности Horizance VPN: какие данные собираются, зачем, кто их обрабатывает и как ими распорядиться.{% endblock %}
+{% block canonical %}https://horizancevpn.com/privacy{% endblock %}
+
+{% block header_cta %}
+<a href="/" class="text-sm font-semibold text-ink2 border border-line2 rounded-xl px-4 py-2 hover:border-faint hover:bg-surface2 transition-colors">
+  На главную
+</a>
+{% endblock %}
+
+{% block content %}
+<section class="max-w-3xl mx-auto px-6 py-16">
+  <h1 class="text-3xl font-bold tracking-tight mb-2">Политика конфиденциальности</h1>
+  <p class="text-sm text-faint mb-10">Действует с 11.07.2026</p>
+
+  <div class="text-dim leading-relaxed space-y-8">
+
+    <div>
+      <h2 class="text-xl font-bold text-ink tracking-tight mb-3">1. Кто мы</h2>
+      <p>
+        Сервис Horizance VPN (сайт horizancevpn.com и Telegram-бот @Horizance_vpn_bot) предоставляет
+        {{ settings.LEGAL_ENTITY_NAME }}, {{ settings.LEGAL_ENTITY_ADDRESS }} (далее — «Оператор», «мы»).
+        По вопросам обработки персональных данных пишите на
+        <a href="mailto:{{ settings.PRIVACY_CONTACT_EMAIL }}" class="text-ink2 underline hover:text-white transition-colors">{{ settings.PRIVACY_CONTACT_EMAIL }}</a>
+        или через <a href="/go/bot?src=privacy" class="text-ink2 underline hover:text-white transition-colors">Telegram-бота</a>.
+      </p>
+    </div>
+
+    <div>
+      <h2 class="text-xl font-bold text-ink tracking-tight mb-3">2. Какие данные мы собираем</h2>
+      <ul class="list-disc pl-5 space-y-2">
+        <li><span class="text-ink2">Бесплатный тест (/trial):</span> IP-адрес и приблизительная геолокация (страна/регион/город), временный идентификатор сессии, при указании — тип устройства. Регистрация не требуется.</li>
+        <li><span class="text-ink2">Вход через Telegram:</span> Telegram ID, username и имя — только после того, как вы сами нажали «Войти через Telegram» (Telegram Login Widget).</li>
+        <li><span class="text-ink2">Платная подписка:</span> статус и дата оплаты. Оплата обрабатывается через Telegram-бота; реквизиты банковской карты нам не передаются и не хранятся — их обрабатывает платёжный оператор (ЮKassa).</li>
+        <li><span class="text-ink2">Обращения в поддержку:</span> текст сообщения и ваш Telegram ID — чтобы можно было ответить.</li>
+        <li><span class="text-ink2">Технические данные и cookie:</span> обезличенная статистика посещений через счётчики аналитики — см. раздел 4.</li>
+      </ul>
+      <p class="mt-3">
+        Мы не логируем, какие сайты и сервисы вы посещаете через VPN-туннель, и не анализируем содержимое вашего трафика.
+      </p>
+    </div>
+
+    <div>
+      <h2 class="text-xl font-bold text-ink tracking-tight mb-3">3. Зачем мы это собираем</h2>
+      <ul class="list-disc pl-5 space-y-2">
+        <li>Чтобы предоставить сам сервис — выдать вам VPN-доступ и поддерживать его работу;</li>
+        <li>Чтобы отвечать на обращения в поддержку;</li>
+        <li>Чтобы понимать, сколько раз один и тот же пользователь запросил бесплатный тест, и защититься от злоупотреблений;</li>
+        <li>Чтобы уведомлять вас о статусе подписки;</li>
+        <li>Чтобы анализировать посещаемость сайта и улучшать его.</li>
+      </ul>
+    </div>
+
+    <div>
+      <h2 class="text-xl font-bold text-ink tracking-tight mb-3">4. Файлы cookie и счётчики аналитики</h2>
+      <p class="mb-3">
+        Мы используем следующие сервисы аналитики. Они устанавливаются только после вашего согласия в
+        cookie-баннере внизу экрана — до этого момента ни один из них не загружается:
+      </p>
+      <ul class="list-disc pl-5 space-y-2">
+        <li><span class="text-ink2">Яндекс.Метрика</span> (Яндекс) — общая статистика посещений, вебвизор, карта кликов;</li>
+        <li><span class="text-ink2">Google Analytics (GA4)</span> (Google LLC) — статистика посещений и ключевых действий на сайте;</li>
+        <li><span class="text-ink2">Microsoft Clarity</span> (Microsoft) — тепловые карты и записи сессий для улучшения интерфейса.</li>
+      </ul>
+      <p class="mt-3">
+        Часть этих сервисов принадлежит компаниям, обрабатывающим данные за пределами РФ (США, Ирландия) —
+        соглашаясь на аналитику, вы даёте согласие и на такую трансграничную передачу. Отказаться можно
+        в любой момент — кнопка «Настройки cookie» внизу каждой страницы.
+      </p>
+    </div>
+
+    <div>
+      <h2 class="text-xl font-bold text-ink tracking-tight mb-3">5. Кому мы передаём данные</h2>
+      <p>
+        Только сервис-провайдерам, перечисленным выше, и только в объёме, необходимом для их работы:
+        Яндекс (Метрика), Google (Analytics), Microsoft (Clarity), ЮKassa (обработка платежей),
+        Telegram (авторизация и сам бот), наш email-провайдер (уведомления и ответы на обращения).
+        Третьим лицам в иных целях мы данные не передаём и не продаём.
+      </p>
+    </div>
+
+    <div>
+      <h2 class="text-xl font-bold text-ink tracking-tight mb-3">6. Сколько мы храним данные</h2>
+      <p>
+        Данные тестовой сессии удаляются вместе с истечением пробного периода. Данные аккаунта — пока
+        он активен, плюс разумный срок после для обработки возможных споров или обращений в поддержку.
+        Аналитические данные хранятся согласно настройкам соответствующего сервиса (Яндекс.Метрика, GA4,
+        Clarity), как правило до 14 месяцев.
+      </p>
+    </div>
+
+    <div>
+      <h2 class="text-xl font-bold text-ink tracking-tight mb-3">7. Ваши права</h2>
+      <p>
+        Вы можете запросить, какие данные о вас хранятся, попросить их исправить или удалить —
+        напишите на <a href="mailto:{{ settings.PRIVACY_CONTACT_EMAIL }}" class="text-ink2 underline hover:text-white transition-colors">{{ settings.PRIVACY_CONTACT_EMAIL }}</a>
+        или через <a href="/go/bot?src=privacy" class="text-ink2 underline hover:text-white transition-colors">Telegram-бота</a>.
+        Согласие на использование аналитических cookie можно отозвать в любой момент кнопкой
+        «Настройки cookie» внизу страницы.
+      </p>
+    </div>
+
+    <div>
+      <h2 class="text-xl font-bold text-ink tracking-tight mb-3">8. Дети</h2>
+      <p>Сервис не предназначен для лиц младше 18 лет, и мы сознательно не собираем данные таких пользователей.</p>
+    </div>
+
+    <div>
+      <h2 class="text-xl font-bold text-ink tracking-tight mb-3">9. Изменения политики</h2>
+      <p>
+        Мы можем обновлять этот документ — актуальная версия всегда доступна по этому адресу,
+        дата последнего обновления указана в начале страницы.
+      </p>
+    </div>
+
+  </div>
+</section>
+{% endblock %}

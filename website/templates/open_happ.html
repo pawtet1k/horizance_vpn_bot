@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{# ═══════════════════════════════════════════════════════════════
+   OPEN_HAPP.HTML
+   Рендерится в /vpn/{client_uuid} (routers/vpn.py) вместо прежнего
+   голого редиректа. Логика: сразу пробуем открыть Happ по зашитой
+   ссылке; если через ~2 сек страница всё ещё видна (значит, приложение
+   не установлено и переход не сработал) — показываем фолбэк со
+   ссылкой на скачивание.
+   ═══════════════════════════════════════════════════════════════ #}
+
+{% block title %}Открываем Happ — Horizance VPN{% endblock %}
+{% block meta_description %}Открываем ваш VPN-конфиг в приложении Happ.{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
+
+{% block content %}
+<section class="min-h-[70vh] flex items-center justify-center px-4 sm:px-6 py-16">
+  <div class="bg-surface border border-line rounded-2xl p-5 sm:p-10 w-full max-w-md text-center">
+
+    <div id="state-trying">
+      <p class="text-dim text-sm mb-4">Открываем Happ...</p>
+      <div class="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto"></div>
+    </div>
+
+    <div id="state-store" class="hidden">
+      <h1 class="text-xl font-semibold mb-2">Установите Happ</h1>
+      <p class="text-dim text-sm mb-6">Приложение не найдено на устройстве</p>
+      <a href="{{ store_url or '/trial' }}"
+         class="block w-full bg-white text-black font-semibold rounded-xl py-4 mb-3">
+        Скачать приложение
+      </a>
+      <a href="{{ happ_url }}"
+         class="block w-full bg-surface2 border border-line2 rounded-xl py-3 text-sm text-dim">
+        Уже установлено — попробовать снова
+      </a>
+      {% if is_ios %}{% include "_ios_appstore_fallback.html" %}{% endif %}
+    </div>
+
+    <script>
+      const happUrl = {{ happ_url | tojson }};
+      const stateTrying = document.getElementById('state-trying');
+      const stateStore  = document.getElementById('state-store');
+
+      function showStore() {
+        stateTrying.classList.add('hidden');
+        stateStore.classList.remove('hidden');
+      }
+
+      const start = Date.now();
+      window.location.href = happUrl;
+
+      setTimeout(() => {
+        if (Date.now() - start < 3000) showStore();
+      }, 2000);
+    </script>
+  </div>
+</section>
+{% endblock %}

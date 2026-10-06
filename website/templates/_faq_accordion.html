@@ -1,0 +1,29 @@
+{# Список вопрос-ответ гармошкой. Используется и на /faq, и на /help —
+   данные в обоих местах одни и те же (routers/faq.py::faq), поэтому разметка
+   вынесена сюда, а не скопирована.
+
+   Стили держим здесь же: /faq — самостоятельная страница со своим <head>, а
+   /help наследует base.html, и общего места для этих трёх правил у них нет. #}
+<style>
+  details.faq-item > summary { list-style: none; }
+  details.faq-item > summary::-webkit-details-marker { display: none; }
+  details.faq-item[open] .chevron { transform: rotate(180deg); }
+  .faq-item .chevron { transition: transform 0.2s ease; }
+</style>
+
+<div class="space-y-2">
+  {% for question, answer in faq.items() %}
+  <details class="faq-item bg-surface2 border border-line2 rounded-xl group">
+    <summary class="flex items-center justify-between px-4 py-4 cursor-pointer select-none
+                    text-ink2 text-sm font-medium
+                    hover:text-white transition-colors duration-150">
+      <span>{{ question }}</span>
+      <i class="fa-solid fa-chevron-down chevron text-mute text-xs ml-3 flex-shrink-0
+                group-hover:text-dim transition-colors duration-150"></i>
+    </summary>
+    <div class="px-4 pb-4 pt-1 text-dim text-sm leading-relaxed border-t border-line mt-1">
+      {{ answer }}
+    </div>
+  </details>
+  {% endfor %}
+</div>

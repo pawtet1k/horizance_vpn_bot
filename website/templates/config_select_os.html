@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}Настройка VPN — Horizance VPN{% endblock %}
+{% block meta_description %}Выберите операционную систему, чтобы настроить Horizance VPN.{% endblock %}
+{% block canonical %}https://horizancevpn.com/config{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
+
+{% block content %}
+<section class="max-w-2xl mx-auto px-6 py-12">
+
+  <a href="/dashboard" class="text-dim text-sm hover:text-ink transition-colors mb-6 inline-flex items-center gap-2">
+    <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> В личный кабинет
+  </a>
+
+  <h1 class="text-2xl font-bold tracking-tight mb-2">Настройка VPN</h1>
+  <p class="text-dim text-sm mb-8">Выберите вашу операционную систему:</p>
+
+  <div class="grid grid-cols-2 gap-2.5">
+    {% for name, icon_class, _url, is_full in os_buttons %}
+    <a href="/config/{{ name }}" data-busy="vpn"
+       class="{{ 'col-span-2' if is_full else '' }}
+              bg-surface2 border border-line2 rounded-xl
+              text-ink2 text-[0.95rem]
+              px-3 py-4 w-full
+              flex flex-col items-center gap-2
+              transition-all duration-150
+              hover:border-faint hover:text-white
+              group">
+      <i class="{{ icon_class }} text-2xl text-dim group-hover:text-white transition-colors duration-150"></i>
+      {{ name }}
+    </a>
+    {% endfor %}
+  </div>
+
+</section>
+{% endblock %}

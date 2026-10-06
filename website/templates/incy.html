@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+
+{# ═══════════════════════════════════════════════════════════════
+   INCY.HTML — /incy
+
+   Под спрос Wordstat на 26.09.2026: «incy» 263 тыс./мес (+196% с июня),
+   «incy скачать» 89 тыс., «incy vpn» 58 тыс., «incy на пк» 50 тыс.,
+   «incy подписка» 7 тыс., «incy на айфон» 2,5 тыс. INCY — наш рекомендованный
+   клиент для iPhone (Happ убран из российского App Store) и передаёт hwid,
+   на котором держится лимит 3 устройств.
+   Факты сверены 26.09.2026: App Store (id6756943388, RU-витрина),
+   github.com/INCY-DEV/incy-platforms, incy.gitbook.io (Deep Links).
+   ═══════════════════════════════════════════════════════════════ #}
+
+{% block title %}INCY: подписка и настройка на iPhone, ПК и Android — Horizance VPN{% endblock %}
+{% block meta_description %}Как подключить VPN в приложении INCY: где скачать для iPhone, Android, Windows, macOS, Linux и ТВ, как добавить подписку в одно касание и что делать, если не подключается.{% endblock %}
+{% block meta_keywords %}incy, incy vpn, incy скачать, incy на пк, incy подписка, incy на айфон, как настроить incy, incy сервера{% endblock %}
+{% block canonical %}https://horizancevpn.com/incy{% endblock %}
+{% block og_title %}INCY: подписка и настройка на iPhone, ПК и Android{% endblock %}
+{% block og_description %}Бесплатное приложение INCY и подписка Horizance VPN: установка на любом устройстве за пару минут.{% endblock %}
+
+{% block content %}
+
+<section class="relative overflow-hidden border-b border-line">
+  <div class="absolute inset-0 -z-10 opacity-40"
+       style="background: radial-gradient(60% 50% at 50% 0%, #16a34a33, transparent 70%), radial-gradient(40% 40% at 85% 20%, #22d3ee22, transparent 70%);"
+       aria-hidden="true"></div>
+  <div class="max-w-5xl mx-auto px-4 sm:px-6 pt-16 pb-14 text-center">
+    <img src="{{ static_v('/static/img/apps/incy.webp') }}" alt="Иконка приложения INCY" width="72" height="72"
+         class="w-[72px] h-[72px] rounded-2xl mx-auto mb-6">
+    <h1 class="text-4xl md:text-5xl font-extrabold tracking-tight leading-[1.08] mb-5">
+      VPN в приложении <span class="text-primary-light">INCY</span>
+    </h1>
+    <p class="text-lg text-dim max-w-2xl mx-auto mb-9 leading-relaxed">
+      INCY — бесплатное приложение для подключения к VPN по подписке. Своих серверов
+      у него нет: доступ даёт подписка Horizance, а INCY её открывает. Работает на
+      iPhone, Android, компьютере и телевизоре.
+    </p>
+    <div class="flex flex-col sm:flex-row gap-3 justify-center">
+      <a href="/trial" class="bg-primary hover:bg-primary-light text-white font-semibold rounded-xl px-8 py-4 transition-colors">
+        Получить подписку на 24 часа
+      </a>
+      <a href="/go/bot?src=incy" class="border border-line2 hover:border-faint hover:bg-surface2 text-ink2 font-semibold rounded-xl px-8 py-4 transition-colors">
+        14 дней бесплатно в Telegram
+      </a>
+    </div>
+  </div>
+</section>
+
+<section class="border-b border-line">
+  <div class="max-w-5xl mx-auto px-4 sm:px-6 py-14">
+    <h2 class="text-2xl font-bold tracking-tight mb-3">Где скачать INCY</h2>
+    <p class="text-dim max-w-3xl mb-8 leading-relaxed">
+      Приложение бесплатное на всех платформах. Скачивайте только из официальных
+      источников — ниже ссылки на них.
+    </p>
+    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+      <a href="/go/app/INCY?src=incy" target="_blank" rel="noopener noreferrer"
+         class="bg-surface border border-line rounded-2xl p-5 hover:border-faint hover:bg-surface2 transition-colors">
+        <i class="fa-brands fa-apple text-xl text-ink2 mb-2" aria-hidden="true"></i>
+        <div class="font-semibold text-ink2">iPhone, iPad, Mac, Apple TV</div>
+        <div class="text-sm text-dim">App Store, есть в российской витрине</div>
+      </a>
+      <a href="https://play.google.com/store/apps/details?id=llc.itdev.incy" target="_blank" rel="noopener noreferrer"
+         class="bg-surface border border-line rounded-2xl p-5 hover:border-faint hover:bg-surface2 transition-colors">
+        <i class="fa-brands fa-android text-xl text-emerald-400 mb-2" aria-hidden="true"></i>
+        <div class="font-semibold text-ink2">Android и Android TV</div>
+        <div class="text-sm text-dim">Google Play</div>
+      </a>
+      <a href="https://github.com/INCY-DEV/incy-platforms" target="_blank" rel="noopener noreferrer"
+         class="bg-surface border border-line rounded-2xl p-5 hover:border-faint hover:bg-surface2 transition-colors">
+        <i class="fa-brands fa-windows text-xl text-primary-light mb-2" aria-hidden="true"></i>
+        <div class="font-semibold text-ink2">Windows, macOS, Linux</div>
+        <div class="text-sm text-dim">Сборки на странице разработчика на GitHub</div>
+      </a>
+    </div>
+  </div>
+</section>
+
+<section class="border-b border-line bg-surface/40">
+  <div class="max-w-5xl mx-auto px-4 sm:px-6 py-14">
+    <h2 class="text-2xl font-bold tracking-tight mb-8">Как подключить за пару минут</h2>
+    <ol class="space-y-4 max-w-3xl">
+      <li class="bg-surface border border-line rounded-2xl p-6 flex gap-4">
+        <span class="shrink-0 w-8 h-8 rounded-full bg-primary/20 text-primary-light font-bold flex items-center justify-center">1</span>
+        <div>
+          <h3 class="font-semibold text-ink2 mb-1">Получите подписку</h3>
+          <p class="text-sm text-dim leading-relaxed">
+            В нашем Telegram-боте — 14 дней бесплатно, или на странице
+            <a href="/trial" class="text-primary-light underline">пробного доступа</a> — 24 часа без регистрации.
+            Подписка — это адрес вида <span class="font-mono text-ink2">horizancevpn.com/sub/…</span>.
+          </p>
+        </div>
+      </li>
+      <li class="bg-surface border border-line rounded-2xl p-6 flex gap-4">
+        <span class="shrink-0 w-8 h-8 rounded-full bg-primary/20 text-primary-light font-bold flex items-center justify-center">2</span>
+        <div>
+          <h3 class="font-semibold text-ink2 mb-1">Установите INCY</h3>
+          <p class="text-sm text-dim leading-relaxed">По ссылкам выше, для своего устройства.</p>
+        </div>
+      </li>
+      <li class="bg-surface border border-line rounded-2xl p-6 flex gap-4">
+        <span class="shrink-0 w-8 h-8 rounded-full bg-primary/20 text-primary-light font-bold flex items-center justify-center">3</span>
+        <div>
+          <h3 class="font-semibold text-ink2 mb-1">Добавьте подписку</h3>
+          <p class="text-sm text-dim leading-relaxed">
+            На телефоне проще всего нажать кнопку «Добавить подписку в INCY» на странице
+            «Ваша личная конфигурация», которую присылает бот. Вручную: скопируйте адрес
+            подписки, в INCY нажмите «+» и вставьте его из буфера обмена — добавьте как
+            подписку, а не как отдельный сервер, тогда список серверов будет обновляться сам.
+          </p>
+        </div>
+      </li>
+      <li class="bg-surface border border-line rounded-2xl p-6 flex gap-4">
+        <span class="shrink-0 w-8 h-8 rounded-full bg-primary/20 text-primary-light font-bold flex items-center justify-center">4</span>
+        <div>
+          <h3 class="font-semibold text-ink2 mb-1">Выберите сервер и подключитесь</h3>
+          <p class="text-sm text-dim leading-relaxed">
+            При первом подключении телефон попросит разрешение на добавление VPN-конфигурации — его нужно дать один раз.
+          </p>
+        </div>
+      </li>
+    </ol>
+    <p class="text-sm text-dim mt-6 max-w-3xl leading-relaxed">
+      Одна подписка работает максимум на 3 устройствах, а адрес подписки одинаковый для INCY и Happ.
+      Для телевизора — отдельная <a href="/tv" class="text-primary-light underline">инструкция</a>.
+    </p>
+  </div>
+</section>
+
+<section class="border-b border-line">
+  <div class="max-w-3xl mx-auto px-4 sm:px-6 py-14">
+    <h2 class="text-2xl font-bold tracking-tight mb-8 text-center">Частые вопросы</h2>
+    <div class="space-y-2">
+      {% for item in faq %}
+      <details class="bg-surface border border-line2 rounded-xl group">
+        <summary class="flex items-center justify-between px-5 py-4 cursor-pointer select-none text-ink2 text-sm font-medium hover:text-white transition-colors">
+          <span>{{ item.q }}</span>
+          <i class="fa-solid fa-chevron-down text-mute text-xs ml-3 flex-shrink-0 group-open:rotate-180 transition-transform" aria-hidden="true"></i>
+        </summary>
+        <div class="px-5 pb-4 pt-1 text-dim text-sm leading-relaxed border-t border-line">{{ item.a }}</div>
+      </details>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {% for item in faq %}
+    {"@type": "Question", "name": {{ item.q | tojson }},
+     "acceptedAnswer": {"@type": "Answer", "text": {{ item.a | tojson }}}}{{ "," if not loop.last }}
+    {% endfor %}
+  ]
+}
+</script>
+{% endblock %}

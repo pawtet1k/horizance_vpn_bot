@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block title %}Публичная оферта — Horizance VPN{% endblock %}
+{% block meta_description %}Публичная оферта на использование сервиса Horizance VPN: условия подписки, оплата, отказ от подписки, ответственность сторон.{% endblock %}
+{% block canonical %}https://horizancevpn.com/oferta{% endblock %}
+
+{% block header_cta %}
+<a href="/" class="text-sm font-semibold text-ink2 border border-line2 rounded-xl px-4 py-2 hover:border-faint hover:bg-surface2 transition-colors">
+  На главную
+</a>
+{% endblock %}
+
+{% block content %}
+<section class="max-w-3xl mx-auto px-6 py-16">
+  <h1 class="text-3xl font-bold tracking-tight mb-2">Публичная оферта</h1>
+  <p class="text-sm text-faint mb-10">Действует с 11.07.2026</p>
+
+  <div class="text-dim leading-relaxed space-y-8">
+
+    <div>
+      <h2 class="text-xl font-bold text-ink tracking-tight mb-3">1. Общие положения</h2>
+      <p>
+        Настоящий документ является публичной офертой {{ settings.LEGAL_ENTITY_NAME }},
+        {{ settings.LEGAL_ENTITY_ADDRESS }} (далее — «Оператор») в адрес любого пользователя сети
+        Интернет (далее — «Пользователь») на предоставление доступа к сервису Horizance VPN — сайт
+        horizancevpn.com и Telegram-бот @Horizance_vpn_bot (далее — «Сервис»).
+      </p>
+      <p class="mt-3">
+        Начиная использовать бесплатный тестовый доступ или оплачивая подписку, Пользователь
+        подтверждает полное и безоговорочное принятие условий этой оферты (акцепт).
+      </p>
+    </div>
+
+    <div>
+      <h2 class="text-xl font-bold text-ink tracking-tight mb-3">2. Предмет оферты</h2>
+      <p>
+        Оператор предоставляет Пользователю доступ к VPN-сервису на протоколе VLESS Reality на
+        условиях, описанных на сайте и в Telegram-боте, в одном из следующих режимов:
+      </p>
+      <ul class="list-disc pl-5 space-y-2 mt-3">
+        <li>Бесплатный тестовый доступ — 24 часа без регистрации через страницу <a href="/trial" class="text-ink2 underline hover:text-white transition-colors">/trial</a>, либо {{ settings.trial_days }} дней при подключении напрямую через Telegram-бота;</li>
+        <li>Платная подписка — {{ settings.default_price }}&nbsp;₽ в месяц или {{ settings.yearly_price }}&nbsp;₽ в год, оформляется через Telegram-бота.</li>
+      </ul>
+    </div>
+
+    <div>
+      <h2 class="text-xl font-bold text-ink tracking-tight mb-3">3. Оплата</h2>
+      <p>
+        Оплата производится в рублях РФ через Telegram-бота одним из предложенных в нём способов.
+        Подписка не продлевается автоматически без предварительного уведомления Пользователя —
+        каждое продление требует отдельного действия Пользователя либо предварительного согласия
+        на автосписание, если такая опция явно включена в боте.
+      </p>
+    </div>
+
+    <div>
+      <h2 class="text-xl font-bold text-ink tracking-tight mb-3">4. Отказ от подписки и возврат средств</h2>
+      <p>
+        Пользователь может отказаться от подписки в любой момент через Telegram-бота — дальнейшие
+        списания после отказа не производятся. Если оплаченная подписка не была активирована или
+        сервисом не пользовались, возврат за неиспользованный период можно запросить в течение 14
+        дней с момента оплаты, написав в поддержку.
+      </p>
+    </div>
+
+    <div>
+      <h2 class="text-xl font-bold text-ink tracking-tight mb-3">5. Ответственность и ограничения</h2>
+      <p>
+        Сервис предоставляется «как есть». Оператор прилагает разумные усилия для поддержания
+        стабильной работы, но не гарантирует бесперебойную доступность или обход всех без исключения
+        блокировок в любой сети в любой момент времени. Оператор не несёт ответственности за действия
+        Пользователя в сети Интернет, совершённые с использованием Сервиса, и за последствия
+        использования Сервиса в нарушение законодательства страны Пользователя.
+      </p>
+    </div>
+
+    <div>
+      <h2 class="text-xl font-bold text-ink tracking-tight mb-3">6. Персональные данные</h2>
+      <p>
+        Обработка персональных данных Пользователя осуществляется в соответствии с
+        <a href="/privacy" class="text-ink2 underline hover:text-white transition-colors">Политикой конфиденциальности</a>,
+        являющейся неотъемлемой частью настоящей оферты.
+      </p>
+    </div>
+
+    <div>
+      <h2 class="text-xl font-bold text-ink tracking-tight mb-3">7. Изменение условий</h2>
+      <p>
+        Оператор вправе изменять условия оферты, публикуя новую редакцию на этой странице. Продолжение
+        использования Сервиса после публикации изменений означает согласие Пользователя с новой редакцией.
+      </p>
+    </div>
+
+    <div>
+      <h2 class="text-xl font-bold text-ink tracking-tight mb-3">8. Реквизиты Оператора</h2>
+      <p>
+        {{ settings.LEGAL_ENTITY_NAME }}<br/>
+        {{ settings.LEGAL_ENTITY_ADDRESS }}<br/>
+        Email: <a href="mailto:{{ settings.PRIVACY_CONTACT_EMAIL }}" class="text-ink2 underline hover:text-white transition-colors">{{ settings.PRIVACY_CONTACT_EMAIL }}</a>
+      </p>
+    </div>
+
+  </div>
+</section>
+{% endblock %}

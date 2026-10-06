@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block title %}VPN с пробным периодом для Happ — 24 часа бесплатно, без регистрации{% endblock %}
+{% block meta_description %}Пробный доступ к Horizance VPN на 24 часа: бесплатно, без карты и без регистрации. Готовая ссылка-подписка для Happ и INCY на Android, iPhone, Windows, macOS, Linux и телевизоре.{% endblock %}
+{% block meta_keywords %}впн пробный период happ, пробная подписка хапп, пробный впн, бесплатный впн на 24 часа, впн с пробным периодом, пробный ключ для happ, пробная подписка happ, vpn 24 hours{% endblock %}
+{% block canonical %}https://horizancevpn.com/trial{% endblock %}
+
+{% block header_cta %}
+<a href="/" class="text-sm font-semibold text-ink2 border border-line2 rounded-xl px-4 py-2 hover:border-faint hover:bg-surface2 transition-colors">
+  На главную
+</a>
+{% endblock %}
+
+{% block content %}
+<section class="min-h-[70vh] flex items-center justify-center px-4 sm:px-6 py-16">
+  <div class="bg-surface border border-line rounded-2xl p-5 sm:p-10 w-full max-w-md text-center">
+
+<h1 class="text-2xl font-semibold tracking-tight mb-3">Пробный VPN для Happ на 24 часа</h1>
+<p class="text-dim text-sm leading-relaxed mb-6">
+  Бесплатно, без карты и без регистрации. Вы получите готовую ссылку-подписку
+  для приложения Happ — на телефон или компьютер.
+</p>
+
+<!-- Разделитель -->
+<div class="flex items-center gap-3 mb-3">
+  <div class="flex-1 h-px bg-line"></div>
+  <span class="text-xs text-faint">Шаг 1</span>
+  <div class="flex-1 h-px bg-line"></div>
+</div>
+
+<p class="text-dim text-sm leading-relaxed mb-6">
+  Скачайте приложение Happ для вашей операционной системы:
+</p>
+
+<!-- Кнопки скачивани приложения -->
+<div class="grid grid-cols-2 gap-2.5 mb-8">
+  {% for name, icon_class, url, is_full in os_buttons %}
+  <a href="{{ url }}"{% if name == 'iOS' %} data-ios-choice{% endif %}
+     target="_blank"
+     rel="noopener noreferrer"
+     onclick="if(window.ym) ym({{ settings.YANDEX_METRIKA_COUNTER_ID }}, 'reachGoal', 'trial_download_client', {os: '{{ name }}'}); if(window.gtag) gtag('event', 'trial_download_client', {os: '{{ name }}'}); if(window.clarity) clarity('event', 'trial_download_client');"
+     class="{{ 'col-span-2' if is_full else '' }}
+            bg-surface2 border border-line2 rounded-xl
+            text-ink2 text-[0.95rem]
+            px-3 py-4 w-full
+            flex flex-col items-center gap-2
+            transition-all duration-150
+            hover:bg-surface2 hover:border-faint hover:text-white
+            group">
+    <i class="{{ icon_class }} text-2xl text-dim group-hover:text-white transition-colors duration-150"></i>
+    {{ name }}
+  </a>
+  {% endfor %}
+</div>
+
+{# Блок «Happ нет в App Store → INCY» — только тем, кто нажал кнопку iOS (владелец, 06.10.26),
+   а не всем, у кого в User-Agent iPhone. #}
+<div id="ios-fallback" hidden>{% include "_ios_appstore_fallback.html" %}</div>
+<script>
+  document.addEventListener('click', function (e) {
+    if (e.target.closest && e.target.closest('[data-ios-choice]')) document.getElementById('ios-fallback').hidden = false;
+  });
+</script>
+
+<!-- Разделитель -->
+<div class="flex items-center gap-3 mb-3 mt-6">
+  <div class="flex-1 h-px bg-line"></div>
+  <span class="text-xs text-faint">Шаг 2</span>
+  <div class="flex-1 h-px bg-line"></div>
+</div>
+
+<!-- Кнопка подключиться -->
+<p class="text-dim text-sm mb-6">
+  Уже установили Happ? Получите вашу VPN-ссылку:
+</p>
+<form method="post" action="/trial/connect" data-busy="vpn" data-t="trial_connect">
+  <button type="submit"
+          class="w-full bg-white text-black font-semibold rounded-xl py-4
+                 transition-opacity duration-150 hover:opacity-90 cursor-pointer">
+    Подключиться
+  </button>
+</form>
+
+<!-- Разделитель -->
+<div class="flex items-center gap-3 mb-3 mt-8">
+  <div class="flex-1 h-px bg-line"></div>
+  <span class="text-xs text-faint">Шаг 3</span>
+  <div class="flex-1 h-px bg-line"></div>
+</div>
+
+<!-- Кнопка Telegram-бот -->
+<p class="text-dim text-sm mb-6">
+  Ссылка действует 24 часа.<br/>
+  Для постоянной подписки подключите Telegram-бот:
+</p>
+<a href="/go/bot?src=trial"
+   target="_blank"
+   rel="noopener noreferrer"
+   onclick="if(window.ym) ym({{ settings.YANDEX_METRIKA_COUNTER_ID }}, 'reachGoal', 'trial_connect_bot'); if(window.gtag) gtag('event', 'trial_connect_bot'); if(window.clarity) clarity('event', 'trial_connect_bot');"
+   class="flex items-center justify-center gap-2.5
+          w-full bg-surface2 border border-line2 rounded-xl py-4
+          text-ink2 text-[0.95rem] font-semibold
+          transition-all duration-150
+          hover:bg-surface2 hover:border-faint hover:text-white
+          group">
+  <i class="fa-brands fa-telegram text-xl text-dim group-hover:text-white transition-colors duration-150"></i>
+  Подключить бота
+</a>
+
+<!-- Честный ответ на «пробный период на 7 дней»: продукт даёт 24 часа на сайте
+     и 14 дней в боте — лучше сказать это прямо, чем собрать отказной трафик. -->
+<p class="text-xs text-faint leading-relaxed mt-8 text-left">
+  Пробный доступ на сайте — ровно 24 часа: это тот же продукт, что и по подписке,
+  без урезанной скорости. Новым пользователям, которые подключаются через
+  Telegram-бота, бесплатный период даётся на {{ settings.trial_days }} дней,
+  дальше подписка — {{ settings.default_price }}&nbsp;₽ в месяц.
+  <a href="/happ" class="underline hover:text-dim transition-colors">Подробнее о ключах и подписке для Happ</a>.
+</p>
+
+  </div>
+</section>
+
+<section class="max-w-2xl mx-auto px-4 sm:px-6 pb-16" aria-labelledby="trial-faq-title">
+  <h2 id="trial-faq-title" class="text-xl font-bold tracking-tight mb-5 text-center">Пробный период: частые вопросы</h2>
+  {% include "_faq_accordion.html" %}
+</section>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {% for q, a in faq.items() %}
+    {"@type": "Question", "name": {{ q | tojson }},
+     "acceptedAnswer": {"@type": "Answer", "text": {{ a | tojson }}}}{{ "," if not loop.last }}
+    {% endfor %}
+  ]
+}
+</script>
+{% endblock %}

@@ -1,0 +1,74 @@
+/* Font Awesome — самостоятельный сабсет: только используемые на сайте иконки
+   (solid+brands). Сгенерировано website/tailwind/build-fa-subset.js из
+   42 иконок вместо полной библиотеки all.min.css. */
+@font-face {
+  font-family: 'Font Awesome 7 Free';
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url('/static/fonts/fa/fa-solid-900.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Font Awesome 7 Brands';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/static/fonts/fa/fa-brands-400.woff2') format('woff2');
+}
+.fa-solid, .fas {
+  font-family: 'Font Awesome 7 Free';
+  font-weight: 900;
+}
+.fa-brands, .fab {
+  font-family: 'Font Awesome 7 Brands';
+  font-weight: 400;
+}
+[class^="fa-"], [class*=" fa-"] {
+  display: inline-block;
+  font-style: normal;
+  font-variant: normal;
+  line-height: 1;
+  text-rendering: auto;
+}
+.fa-arrow-left::before { content: "\f060"; }
+.fa-arrows-rotate::before { content: "\f021"; }
+.fa-ban::before { content: "\f05e"; }
+.fa-bug::before { content: "\f188"; }
+.fa-building-shield::before { content: "\e4d8"; }
+.fa-chevron-down::before { content: "\f078"; }
+.fa-circle-check::before { content: "\f058"; }
+.fa-circle-play::before { content: "\f144"; }
+.fa-circle-question::before { content: "\f059"; }
+.fa-circle-xmark::before { content: "\f057"; }
+.fa-clock::before { content: "\f017"; }
+.fa-credit-card::before { content: "\f09d"; }
+.fa-database::before { content: "\f1c0"; }
+.fa-feather::before { content: "\f52d"; }
+.fa-gauge::before { content: "\f624"; }
+.fa-gauge-high::before { content: "\f625"; }
+.fa-gift::before { content: "\f06b"; }
+.fa-globe::before { content: "\f0ac"; }
+.fa-hammer::before { content: "\f6e3"; }
+.fa-headset::before { content: "\f590"; }
+.fa-key::before { content: "\f084"; }
+.fa-lock::before { content: "\f023"; }
+.fa-mask::before { content: "\f6fa"; }
+.fa-qrcode::before { content: "\f029"; }
+.fa-server::before { content: "\f233"; }
+.fa-shuffle::before { content: "\f074"; }
+.fa-sliders::before { content: "\f1de"; }
+.fa-triangle-exclamation::before { content: "\f071"; }
+.fa-up-right-from-square::before { content: "\f35d"; }
+.fa-user-plus::before { content: "\f234"; }
+.fa-user-secret::before { content: "\f21b"; }
+.fa-tv::before { content: "\f26c"; }
+.fa-mobile-screen::before { content: "\f3cf"; }
+.fa-android::before { content: "\f17b"; }
+.fa-apple::before { content: "\f179"; }
+.fa-chrome::before { content: "\f268"; }
+.fa-google::before { content: "\f1a0"; }
+.fa-linux::before { content: "\f17c"; }
+.fa-telegram::before { content: "\f2c6"; }
+.fa-vk::before { content: "\f189"; }
+.fa-windows::before { content: "\f17a"; }
+.fa-yandex-international::before { content: "\f414"; }

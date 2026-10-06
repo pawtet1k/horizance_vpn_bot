@@ -1,0 +1,293 @@
+{% extends "base.html" %}
+
+{# ═══════════════════════════════════════════════════════════════
+   STATUS.HTML — «что работает сейчас» (/status).
+   Данные: website/status_data.json, читается на каждый запрос
+   (см. routers/status.py). Классы статусов расписаны литерально
+   в макросе ниже, а не собираются из строк: сборка Tailwind
+   (website/tailwind/build.sh) сканирует шаблоны и динамически
+   склеенные имена классов не находит.
+   ═══════════════════════════════════════════════════════════════ #}
+
+{% macro badge(status, label) -%}
+  {%- if status == 'ok' -%}
+    <span class="inline-flex items-center gap-2 text-xs font-semibold rounded-full px-3 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 whitespace-nowrap">{{ label }}</span>
+  {%- elif status == 'partial' -%}
+    <span class="inline-flex items-center gap-2 text-xs font-semibold rounded-full px-3 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/30 whitespace-nowrap">{{ label }}</span>
+  {%- else -%}
+    <span class="inline-flex items-center gap-2 text-xs font-semibold rounded-full px-3 py-1 bg-rose-500/10 text-rose-400 border border-rose-500/30 whitespace-nowrap">{{ label }}</span>
+  {%- endif -%}
+{%- endmacro %}
+
+{% block title %}Что работает сейчас — обновлено {{ data.updated_human }} | Horizance VPN{% endblock %}
+{% block meta_description %}Какие сервисы и VPN-протоколы работают в России сейчас: Telegram, WhatsApp, YouTube, Discord и другие — со статусами и датами. Плюс разбор транспортов Xray и Reality. Проверено {{ data.updated_human }}.{% endblock %}
+{% block meta_keywords %}какой vpn работает, работающий vpn, впн не работает, что работает сейчас, статус vpn россия, telegram не работает, whatsapp заблокирован, vless reality, транспорт xray, grpc xhttp{% endblock %}
+{% block canonical %}https://horizancevpn.com/status{% endblock %}
+{% block og_title %}Что работает сейчас — обновлено {{ data.updated_human }}{% endblock %}
+{% block og_description %}Статус VPN-протоколов и заблокированных сервисов в России с датой последней проверки.{% endblock %}
+
+{% block content %}
+
+<!-- ═══════════════ ШАПКА ═══════════════ -->
+<section class="border-b border-line">
+  <div class="max-w-4xl mx-auto px-6 pt-14 pb-10">
+    <h1 class="text-3xl md:text-[2.5rem] font-extrabold tracking-tight leading-[1.12] mb-5">
+      Что работает сейчас
+    </h1>
+
+    <div class="inline-flex items-center gap-2 text-sm font-mono text-ink2 border border-line2 rounded-full px-4 py-2 mb-6 bg-surface">
+      <span class="relative flex h-2 w-2">
+        <span class="connect-line absolute inline-flex h-full w-full rounded-full bg-emerald-400"></span>
+      </span>
+      <span>Проверено {{ data.updated_human }}, {{ data.updated_time }}</span>
+    </div>
+
+    <p class="text-lg text-dim leading-relaxed mb-4">
+      Страница отвечает на один вопрос: что в России сейчас не открывается без VPN и какие
+      способы подключения ещё работают. Ниже — сервисы с датами ограничений, статусы протоколов
+      и разбор того, из чего складывается подключение (транспорт, маскировка, ядро). Мы держим
+      собственные серверы, поэтому пишем о том, что видим у себя и в обращениях пользователей.
+    </p>
+    <p class="text-dim leading-relaxed">
+      Данные обновляются вручную — это не автоматический мониторинг. Дата вверху всегда
+      настоящая: если проверка была неделю назад, здесь будет дата недельной давности,
+      а не сегодняшняя.
+    </p>
+  </div>
+</section>
+
+<!-- ═══════════════ ПРОТОКОЛЫ ═══════════════ -->
+<section class="border-b border-line bg-surface/40">
+  <div class="max-w-4xl mx-auto px-6 py-14">
+    <h2 class="text-2xl font-bold tracking-tight mb-3">Способы подключения</h2>
+    <p class="text-dim max-w-2xl mb-8 leading-relaxed">
+      Работает или нет — зависит не от названия сервиса, а от протокола, на котором он построен.
+      Поэтому здесь список протоколов, а не рейтинг чужих приложений.
+    </p>
+
+    <div class="space-y-3">
+      {% for item in data.protocols %}
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <h3 class="font-semibold text-ink2">{{ item.name }}</h3>
+          {{ badge(item.status, item.label) }}
+        </div>
+        <p class="text-sm text-dim leading-relaxed">{{ item.comment }}</p>
+        <p class="text-xs text-faint font-mono mt-3">{{ item.changed }}</p>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ ИЗ ЧЕГО СОСТОИТ ПОДКЛЮЧЕНИЕ ═══════════════ -->
+<section class="border-b border-line">
+  <div class="max-w-4xl mx-auto px-6 py-14">
+    <h2 class="text-2xl font-bold tracking-tight mb-3">Из чего состоит подключение: транспорт, маскировка, ядро</h2>
+    <p class="text-dim max-w-3xl mb-8 leading-relaxed">
+      «VLESS + Reality» — это не одно название, а три независимых выбора. Протокол отвечает за то,
+      как устроен обмен с сервером; транспорт — как этот обмен упакован в сетевые соединения;
+      слой маскировки — как выглядит начало соединения со стороны. Их комбинируют, и от комбинации
+      зависит, будет подключение работать или нет. Разбираем по порядку — это тот случай, когда
+      детали действительно объясняют разницу между двумя одинаково названными конфигурациями.
+    </p>
+
+    <h3 class="text-lg font-bold tracking-tight text-ink2 mb-3">Транспорт — как упакован трафик</h3>
+    <div class="space-y-3 mb-10">
+      {% for item in data.transports %}
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <h4 class="font-semibold text-ink2">{{ item.name }}</h4>
+          {% if item.reality %}
+          <span class="inline-flex items-center gap-2 text-xs font-semibold rounded-full px-3 py-1 bg-sky-500/10 text-sky-300 border border-sky-500/30 whitespace-nowrap">Reality возможен</span>
+          {% else %}
+          <span class="inline-flex items-center gap-2 text-xs font-semibold rounded-full px-3 py-1 bg-surface2 text-faint border border-line2 whitespace-nowrap">Только обычный TLS</span>
+          {% endif %}
+        </div>
+        <p class="text-sm text-dim leading-relaxed">{{ item.note }}</p>
+      </div>
+      {% endfor %}
+    </div>
+
+    <h3 class="text-lg font-bold tracking-tight text-ink2 mb-3">Маскировка — отдельный выбор, а не часть транспорта</h3>
+    <p class="text-dim max-w-3xl mb-5 leading-relaxed">
+      Один и тот же VLESS поверх одного и того же транспорта может идти с Reality, с обычным TLS
+      или вовсе без шифрования — это независимая настройка. Отсюда и путаница в отзывах:
+      «VLESS перестал работать» у одного и «VLESS работает» у другого нередко означают
+      именно разные слои маскировки, а не разные протоколы.
+    </p>
+    <div class="space-y-3 mb-10">
+      {% for item in data.security_layers %}
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <h4 class="font-semibold text-ink2">{{ item.name }}</h4>
+          {{ badge(item.status, item.label) }}
+        </div>
+        <p class="text-sm text-dim leading-relaxed">{{ item.comment }}</p>
+      </div>
+      {% endfor %}
+    </div>
+
+    <h3 class="text-lg font-bold tracking-tight text-ink2 mb-3">Ядро — программа, которая всё это выполняет</h3>
+    <p class="text-dim max-w-3xl mb-5 leading-relaxed">
+      Приложение, которое вы видите на телефоне, обычно не реализует протоколы само: оно
+      запускает ядро и передаёт ему конфигурацию. Happ, например, построен на Xray-core —
+      поэтому и сообщения об ошибках в нём приходят от ядра, а не от интерфейса.
+    </p>
+    <div class="space-y-3 mb-6">
+      {% for item in data.cores %}
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <h4 class="font-semibold text-ink2 mb-3">{{ item.name }}</h4>
+        <p class="text-sm text-dim leading-relaxed">{{ item.note }}</p>
+      </div>
+      {% endfor %}
+    </div>
+
+    <p class="text-xs text-faint leading-relaxed max-w-3xl">
+      Названия транспортов, ограничение «Reality только с RAW, XHTTP и gRPC» и описание самого
+      Reality сверены с документацией разработчиков:
+      <a href="https://xtls.github.io/en/config/transport.html" target="_blank" rel="noopener noreferrer" class="underline hover:text-dim transition-colors">справочник по транспортам Xray</a>,
+      <a href="https://github.com/XTLS/REALITY" target="_blank" rel="noopener noreferrer" class="underline hover:text-dim transition-colors">репозиторий REALITY</a>,
+      <a href="https://github.com/XTLS/Xray-core" target="_blank" rel="noopener noreferrer" class="underline hover:text-dim transition-colors">Xray-core</a>.
+    </p>
+  </div>
+</section>
+
+<!-- ═══════════════ СЕРВИСЫ ═══════════════ -->
+<section class="border-b border-line bg-surface/40">
+  <div class="max-w-4xl mx-auto px-6 py-14">
+    <h2 class="text-2xl font-bold tracking-tight mb-3">Сервисы: что открывается, а что нет</h2>
+    <p class="text-dim max-w-2xl mb-8 leading-relaxed">
+      Сводка по сервисам, о которых спрашивают чаще всего, — с датами, чтобы её можно было
+      сверить. Подробные разборы — в статьях по ссылкам.
+    </p>
+
+    <div class="grid md:grid-cols-2 gap-5">
+      {% for item in data.services %}
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <h3 class="font-semibold text-ink2">{{ item.name }}</h3>
+          {{ badge(item.status, item.label) }}
+        </div>
+        <p class="text-sm text-dim leading-relaxed">{{ item.comment }}</p>
+        {% if item.link %}
+        <p class="text-sm mt-3"><a href="{{ item.link }}" class="text-primary hover:underline">Подробный разбор</a></p>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ ХРОНИКА ═══════════════ -->
+<section class="border-b border-line">
+  <div class="max-w-4xl mx-auto px-6 py-14">
+    <h2 class="text-2xl font-bold tracking-tight mb-8">Хроника изменений</h2>
+    <ol class="space-y-5">
+      {% for entry in data.changelog %}
+      <li class="border-l-2 border-line2 pl-5">
+        <time datetime="{{ entry.date_iso }}" class="block text-xs text-faint font-mono mb-1.5">{{ entry.date_human }}</time>
+        <p class="text-dim leading-relaxed text-sm">{{ entry.text }}</p>
+      </li>
+      {% endfor %}
+    </ol>
+  </div>
+</section>
+
+<!-- ═══════════════ «ЭТО МОЖЕТ БЫТЬ НЕ БЛОКИРОВКА» ═══════════════ -->
+<section class="border-b border-line bg-surface/40">
+  <div class="max-w-4xl mx-auto px-6 py-14">
+    <h2 class="text-2xl font-bold tracking-tight mb-3">Когда дело вообще не в VPN</h2>
+    <div class="text-dim leading-relaxed space-y-4 max-w-3xl">
+      <p>
+        Часть жалоб «ничего не работает» относится не к сервису и не к протоколу, а к состоянию
+        самой сети. Два случая стоит различать, потому что решения у них разные.
+      </p>
+      <p>
+        <span class="text-ink2 font-semibold">Мобильный интернет ограничен на уровне сети.</span>
+        Если данные не проходят вовсе, туннель не поможет: передавать через него нечего.
+        Здесь работают только другие каналы связи — домашний Wi-Fi, проводное подключение,
+        связь у знакомых. Что именно скрывается за словом «глушилки» и как отличить один
+        случай от другого, разобрано в статье
+        <a href="/blog/glushilki" class="text-primary hover:underline">о глушилках</a>.
+      </p>
+      <p>
+        <span class="text-ink2 font-semibold">Режим белых списков.</span>
+        Данные ходят, но только до разрешённого перечня адресов: часть сайтов и приложений
+        открывается, остальное — нет. Это отдельное явление, и оно разобрано в статье
+        <a href="/blog/belye-spiski" class="text-primary hover:underline">о белых списках</a>.
+      </p>
+      <p>
+        <span class="text-ink2 font-semibold">Проблема на стороне устройства.</span>
+        Сбитое время, старая версия клиента, конфликт двух VPN-профилей. Конкретные сообщения
+        об ошибках разобраны в <a href="/happ/oshibki" class="text-primary hover:underline">справочнике ошибок Happ</a>.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ ЧЕСТНЫЙ БЛОК ПРО СЕБЯ ═══════════════ -->
+<section class="border-b border-line">
+  <div class="max-w-4xl mx-auto px-6 py-14">
+    <h2 class="text-2xl font-bold tracking-tight mb-3">Что с нашим сервисом</h2>
+    <div class="text-dim leading-relaxed space-y-4 max-w-3xl">
+      <p>
+        Если перевести на язык разделов выше: у нас VLESS поверх транспорта gRPC со слоем
+        маскировки Reality. Это не вечная гарантия: с декабря 2025 года появляются сообщения
+        об ограничениях самого протокола VLESS без маскировки, и мы исходим из того, что
+        требования к маскировке со временем будут только расти.
+      </p>
+      <p>
+        Что делаем: держим несколько узлов, переключение между ними доступно прямо в приложении,
+        а подписка выдаётся ссылкой на список серверов — если состав меняется, клиент подтягивает
+        новый сам, без повторной настройки.
+      </p>
+      <p>
+        Если у нас случается сбой, он появится в хронике выше с датой. Страница без единой
+        записи о собственных проблемах — это не показатель надёжности, а показатель того,
+        что её не ведут.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ CTA ═══════════════ -->
+<section>
+  <div class="max-w-3xl mx-auto px-6 py-16 text-center">
+    <h2 class="text-2xl font-bold tracking-tight mb-4">Проверьте, как это работает у вас</h2>
+    <p class="text-dim mb-8">24 часа бесплатно. Без карты, без обязательств.</p>
+    <a href="/trial" class="inline-block bg-primary hover:bg-primary-light text-white font-semibold rounded-xl px-8 py-4 transition-colors">
+      Получить бесплатный доступ
+    </a>
+  </div>
+</section>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "name": "Что работает сейчас — статус VPN и сервисов в России",
+  "description": {{ ("Статус VPN-протоколов и заблокированных сервисов в России. Последняя проверка: " ~ data.updated_human ~ ".") | tojson }},
+  "url": "https://horizancevpn.com/status",
+  "inLanguage": "ru-RU",
+  "datePublished": {{ data.published_iso | tojson }},
+  "dateModified": {{ data.updated_iso | tojson }},
+  "publisher": {
+    "@type": "Organization",
+    "name": "Horizance",
+    "logo": {"@type": "ImageObject", "url": "https://horizancevpn.com/static/img/logo.png"}
+  }
+}
+</script>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {"@type": "ListItem", "position": 1, "name": "Главная", "item": "https://horizancevpn.com/"},
+    {"@type": "ListItem", "position": 2, "name": "Что работает сейчас", "item": "https://horizancevpn.com/status"}
+  ]
+}
+</script>
+{% endblock %}

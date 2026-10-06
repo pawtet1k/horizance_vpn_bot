@@ -1,0 +1,112 @@
+<!-- Фолбэк для iOS. Happ убирают из российского App Store по требованию РКН
+     (сентябрь 2026 — второй раз, id6788279553 снят вообще отовсюду).
+     Раньше здесь был только совет сменить регион Apple ID. Совет рабочий, но
+     он требует от человека лезть в настройки учётной записи, и часть людей на
+     этом просто уходит — поэтому первым делом даём то, что работает сразу:
+     обычный адрес подписки плюс клиенты, которые в российской витрине есть
+     (перечень и их App Store ID — settings.IOS_ALTERNATIVE_CLIENTS). -->
+
+{% if ios_clients %}
+<div class="mt-4 text-left bg-surface2 border border-line2 rounded-xl px-4 py-4">
+  <p class="text-sm font-semibold mb-1">Не получается поставить Happ на iPhone?</p>
+  <p class="text-xs text-dim leading-relaxed mb-3">
+    Apple убрала Happ из российского App Store. Ваш ключ от этого не изменился —
+    он подходит и к другому приложению. Мы проверили и рекомендуем одно
+    (<a href="/happ/iphone" class="underline hover:text-ink">подробная инструкция</a>):
+  </p>
+
+  <p class="text-xs text-dim mb-2">1. Поставьте приложение:</p>
+  <div class="space-y-2 mb-4">
+    {% for client in ios_clients %}
+    <a href="/go/app/{{ client.name }}?src={{ 'vpn_page' if sub_url else 'trial' }}" target="_blank" rel="noopener"
+       class="flex items-center justify-between gap-3 bg-surface border border-line rounded-lg px-3 py-2.5">
+      <span class="flex items-center gap-2.5 text-sm font-semibold">
+        {% if client.icon %}<img src="{{ static_v(client.icon) }}" alt="" width="32" height="32" class="w-8 h-8 rounded-lg" loading="lazy">{% endif %}
+        {{ client.name }}
+      </span>
+      <span class="text-xs text-dim text-right">{{ client.note }}</span>
+    </a>
+    {% endfor %}
+  </div>
+
+  {% if sub_url %}
+  {% for client in ios_clients if client_add_urls and client_add_urls.get(client.name) %}
+  <p class="text-xs text-dim mb-2">2. Когда приложение установится, нажмите:</p>
+  <a href="{{ client_add_urls[client.name] }}"
+     class="block w-full text-center bg-white text-black text-sm font-semibold rounded-lg py-3 mb-4">
+    Добавить подписку в {{ client.name }}
+  </a>
+  <p class="text-xs text-dim mb-2">
+    Если кнопка не сработала, скопируйте адрес и в {{ client.name }} нажмите «+» →
+    вставить из буфера обмена (добавьте как подписку):
+  </p>
+  {% else %}
+  <p class="text-xs text-dim mb-2">
+    2. Скопируйте адрес подписки и добавьте его в приложении:
+  </p>
+  {% endfor %}
+  <!-- столбиком, а не в строку: на iPhone в портрете поле не сжималось и
+       кнопка «Копировать» уезжала за край экрана (проверено Playwright, 375px) -->
+  <div class="flex flex-col gap-2">
+    <input id="sub-url-field" type="text" readonly value="{{ sub_url }}"
+           class="w-full min-w-0 bg-surface border border-line rounded-lg px-3 py-2
+                  text-xs text-ink font-mono">
+    <button type="button" id="sub-url-copy"
+            class="w-full bg-white text-black text-xs font-semibold rounded-lg py-2.5 cursor-pointer">
+      Копировать
+    </button>
+  </div>
+
+  <script>
+    (function () {
+      const field = document.getElementById('sub-url-field');
+      const button = document.getElementById('sub-url-copy');
+      if (!field || !button) return;
+      button.addEventListener('click', async function () {
+        // Safari отдаёт navigator.clipboard только по https и не во всех
+        // версиях, поэтому оставляем select()+execCommand как запасной путь.
+        try {
+          await navigator.clipboard.writeText(field.value);
+        } catch (e) {
+          field.select();
+          field.setSelectionRange(0, field.value.length);
+          document.execCommand('copy');
+        }
+        button.textContent = 'Скопировано';
+        setTimeout(function () { button.textContent = 'Копировать'; }, 2000);
+      });
+    })();
+  </script>
+  {% else %}
+  <p class="text-xs text-dim">
+    2. Ключ-подписку получите ниже — он одинаковый для всех приложений.
+  </p>
+  {% endif %}
+</div>
+{% endif %}
+
+<details class="mt-3 text-left bg-surface2 border border-line2 rounded-xl px-4 py-3 group">
+  <summary class="text-xs text-dim cursor-pointer select-none list-none flex items-center gap-2">
+    <i class="fa-solid fa-circle-question"></i>
+    Хочу именно Happ — как его вернуть
+  </summary>
+  <div class="mt-3 text-xs text-dim leading-relaxed space-y-2">
+    <p>
+      Приложение никуда не делось — оно осталось в App Store других стран.
+      Доступность определяется страной вашего Apple ID, а не ссылкой,
+      поэтому регион нужно временно сменить:
+    </p>
+    <ol class="list-decimal list-inside space-y-1">
+      <li>Настройки → [ваше имя] → Медиа и покупки → Просмотреть учётную запись</li>
+      <li>Страна или регион → Изменить страну или регион</li>
+      <li>Выберите любую страну кроме России (например, США или Казахстан). Способ оплаты можно оставить «Нет», если не покупаете платные приложения</li>
+      <li>Откройте App Store и найдите «Happ - Proxy Utility» — теперь его можно скачать</li>
+      <li>После установки регион можно вернуть обратно в Россию — само приложение продолжит работать</li>
+    </ol>
+    <p>
+      В российской витрине сейчас есть приложения с похожими названиями
+      («Happ VPN», «Happ VPN Official») от посторонних издателей. Это не Happ —
+      ставить их не нужно.
+    </p>
+  </div>
+</details>

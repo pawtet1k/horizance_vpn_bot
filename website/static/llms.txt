@@ -1,0 +1,43 @@
+# Horizance VPN
+
+> Личный VPN-сервис на протоколе VLESS Reality для России — обходит блокировки и DPI, работает на Android, iOS, Windows, macOS и в Telegram.
+
+## Основные страницы
+- [Главная](https://horizancevpn.com/): описание сервиса, тарифы, как подключиться, поддерживаемые платформы, FAQ
+- [Бесплатный тест на 24 часа](https://horizancevpn.com/trial): подключение без Telegram-бота и без банковской карты
+- [Ключ и подписка для Happ](https://horizancevpn.com/happ): как получить рабочую ссылку-подписку для клиента Happ, чем ключ отличается от подписки, цены и платформы
+- [INCY: подписка и настройка](https://horizancevpn.com/incy): бесплатное приложение INCY для iPhone, iPad, Mac, Apple TV, Android, Android TV, Windows, macOS и Linux — где скачать, как добавить подписку Horizance в одно касание, что делать, если не подключается
+- [VPN на телевизор](https://horizancevpn.com/tv): Android TV и Apple TV — какое приложение поставить (Happ, INCY) и как перенести подписку с телефона через Web Import (tv.happ.su) или QR-код; Telegram на телевизоре не нужен; Samsung/LG — через приставку
+- [Happ пропал из App Store на iPhone](https://horizancevpn.com/happ/iphone): приложение убрали из российского App Store в августе 2026 — чем его заменить (INCY), как перенести ссылку-подписку без её замены и как вернуть сам Happ через смену страны Apple ID; ошибки «неизвестное действие deepLink» и «The subscription URL is not valid»
+- [Ошибки Happ](https://horizancevpn.com/happ/oshibki): справочник сообщений об ошибках (Xray Core, TLS-рукопожатие, гео-файлы, 404, 502, тайм-аут) и что делать по каждому
+- [Что работает сейчас](https://horizancevpn.com/status): статус VPN-протоколов и заблокированных сервисов в России с датой последней проверки, обновляется вручную
+- [Частые вопросы](https://horizancevpn.com/faq): ответы на типичные проблемы подключения и оплаты
+
+## Как устроен сервис
+Регистрация, оплата подписки и управление VPN-конфигурацией происходят через Telegram-бота: https://t.me/Horizance_vpn_bot
+Тариф — 99 руб/месяц, новым пользователям даётся бесплатный пробный период. Протокол VLESS Reality (маскировка под обычный HTTPS-трафик), клиентское приложение — Happ (Android, iOS, Windows, macOS, Linux).
+
+## Блог
+[Блог](https://horizancevpn.com/blog): статьи о VPN, блокировках в России, протоколах и сравнения с другими сервисами.
+
+- [Глушилки: почему пропадает мобильный интернет и что это на самом деле](https://horizancevpn.com/blog/glushilki): «Глушилки» — народное название четырёх разных явлений: ограничения мобильного интернета, режима белых списков, подавления GPS-навигации и суточного периода охлаждения сим-карты. Как их различить и что помогает в каждом случае.
+- [Белые списки в России: что это и какие сайты открываются](https://horizancevpn.com/blog/belye-spiski): Режим, при котором мобильный интернет открывает только разрешённый перечень сайтов: чем отличается от блокировки сайта и от отключения интернета, что входит в перечень, почему сайт из списка иногда не открывается.
+- [Лучший VPN для России в 2026: честное сравнение](https://horizancevpn.com/blog/luchshiy-vpn-rossiya-2026): Какой VPN выбрать в России в 2026 году: критерии устойчивости к блокировкам, сравнение платных сервисов, self-hosted и Horizance.
+- [Как подключить Horizance: пошагово для Android, iOS и ПК](https://horizancevpn.com/blog/kak-podklyuchit-horizance): Пошаговое подключение Horizance VPN через Telegram-бота и Happ на Android, iOS, Windows, macOS, Linux, плюс решение частых проблем.
+- [Что ещё работает в России в 2026: VPN vs DPI-обход](https://horizancevpn.com/blog/obhod-blokirovok-rossiya-2026): Как ТСПУ блокирует VPN в 2026 году, чем блокировка протокола отличается от блокировки сайта и какие протоколы держатся дольше остальных.
+- [VLESS vs WireGuard vs Shadowsocks: протоколы в 2026](https://horizancevpn.com/blog/vless-vs-wireguard-vs-shadowsocks): Технический разбор VLESS+Reality, WireGuard/AmneziaWG и Shadowsocks: детектирование DPI, скорость и что выбрать в России в 2026 году.
+- [Бесплатный VPN в России: что реально работает в 2026](https://horizancevpn.com/blog/besplatny-vpn-rossiya-2026): Какие бесплатные VPN ещё обходят блокировки в России в 2026 году, их реальные минусы и честная бесплатная альтернатива на 24 часа.
+- [VPN для YouTube в России: как разблокировать в 2026](https://horizancevpn.com/blog/vpn-dlya-youtube): YouTube заблокирован в России с февраля 2026. Разбираем, какой VPN нужен для просмотра без буферизации и просадки качества.
+- [VPN реально защищает? Что он скрывает, а что нет](https://horizancevpn.com/blog/vpn-bezopasnost-anonimnost): Разбираем честно: VPN шифрует трафик и прячет IP, но не делает анонимным в соцсетях и не защищает от фишинга. Что важно знать.
+- [Amnezia VPN в 2026 году: обзор, тарифы и сравнение с Horizance](https://horizancevpn.com/blog/amnezia-vpn-obzor): Amnezia VPN в 2026 году: как работает self-host, что даёт Premium, какие протоколы держатся против блокировок. Сравнение с Horizance VPN.
+- [Happ VPN: что это на самом деле и нужен ли к нему отдельный сервис](https://horizancevpn.com/blog/happ-vpn-obzor): Happ — приложение-клиент для VLESS, VMess, Trojan и Shadowsocks без собственных серверов. Разбираем, чем оно отличается от готового VPN-сервиса Horizance.
+- [VPN для Instagram и TikTok: что работает сейчас](https://horizancevpn.com/blog/vpn-dlya-instagram-tiktok): Instagram заблокирован, TikTok ограничен для российских IP. Разбираем, какой VPN нужен для стабильной работы обеих сетей в 2026 году.
+- [Ваня ВПН, Дядя ВПН, Щука: честный разбор народных VPN-ботов](https://horizancevpn.com/blog/telegram-vpn-boty): Честный разбор народных Telegram-ботов для VPN: как они устроены, чем рискует пользователь и в чём отличие от Horizance.
+- [Что такое VPN и зачем он нужен — без воды](https://horizancevpn.com/blog/chto-takoe-vpn): Простое объяснение, что такое VPN: как он шифрует трафик, меняет IP и зачем нужен в России в 2026 году. Без сложных терминов.
+- [Outline VPN: обзор 2026 — Shadowsocks-инструмент для своего сервера](https://horizancevpn.com/blog/outline-vpn-obzor): Outline VPN в 2026: как работают Outline Manager и Client, насколько Shadowsocks устойчив к блокировкам в РФ. Сравнение с Horizance VPN.
+- [VPN для Roblox и Brawl Stars: что работает без лагов](https://horizancevpn.com/blog/vpn-dlya-igr): Актуальный статус Roblox и Brawl Stars в России и honest-разбор, что в VPN реально влияет на лаги: пинг, стабильность, сервер.
+- [VPN-плагин vs нативное приложение: что выбрать](https://horizancevpn.com/blog/rasshirenie-vs-prilozhenie): Разбираем разницу между VPN-плагином для браузера и нативным приложением: что защищают, какие протоколы используют, что выбрать.
+- [Radmin VPN: это не VPN для обхода блокировок — разбираемся, что это](https://horizancevpn.com/blog/radmin-vpn-obzor): Radmin VPN — виртуальная LAN-сеть от Famatech для игр. Объясняем, почему он не обходит блокировки сайтов, в отличие от Horizance.
+- [ByeByeDPI, Camo, CIANO: альтернативы VPN — и почему они не то](https://horizancevpn.com/blog/alternativy-vpn): ByeByeDPI, Camo, CIANO обходят DPI-блокировки точечно, но не шифруют трафик и не скрывают IP. Разбираем, чем это отличается от VPN.
+- [VPN на роутере и Smart TV: как настроить](https://horizancevpn.com/blog/vpn-router-smart-tv): Как подключить VPN к Smart TV и настроить его на роутере: раздача хотспота, OpenWrt с Xray/sing-box, ограничения и когда это оправдано.
+- [Jump VPN обзор: что за приложение и стоит ли на него полагаться в России](https://horizancevpn.com/blog/jump-vpn-obzor): Jump VPN (JumpJumpVPN) в 2026 году: бесплатный лимит по времени, непрозрачный протокол. Сравниваем с Horizance VPN на VLESS+Reality.

@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}Ожидаем подтверждение оплаты — Horizance VPN{% endblock %}
+{% block meta_description %}Ожидаем подтверждение оплаты от банка.{% endblock %}
+{% block canonical %}https://horizancevpn.com/pay/waiting{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
+
+{% block content %}
+<section class="max-w-2xl mx-auto px-6 py-12">
+
+  <h1 class="text-2xl font-bold tracking-tight mb-6">Оплата подписки</h1>
+
+  <div id="pay-waiting-state"
+       data-baseline-paid-periods="{{ baseline_paid_periods }}"
+       class="bg-surface border border-line rounded-2xl p-6 leading-relaxed text-ink2 flex items-center gap-3">
+    <span class="w-4 h-4 border-2 border-mute border-t-transparent rounded-full animate-spin flex-shrink-0" aria-hidden="true"></span>
+    <span>Ожидаем подтверждение оплаты от банка — обычно это занимает не больше минуты…</span>
+  </div>
+
+  <a href="/dashboard" class="text-dim text-sm hover:text-ink transition-colors mt-6 inline-flex items-center gap-2">
+    <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> В личный кабинет
+  </a>
+
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+"use strict";
+
+const POLL_INTERVAL_MS = 3000;
+const MAX_POLL_ATTEMPTS = 40; // ~2 минуты
+
+/**
+ * Запрашивает текущий статус подписки (тот же эндпойнт, что и дэшборд).
+ * @returns {Promise<object>}
+ */
+async function fetchSubscriptionStatus() {
+  const response = await fetch("/api/subscription", {
+    method: "GET",
+    credentials: "include",
+    headers: { "Accept": "application/json" }
+  });
+  if (!response.ok) {
+    throw new Error(`Subscription request failed: ${response.status}`);
+  }
+  return response.json();
+}
+
+/**
+ * Показывает финальное состояние (успех/отказ/таймаут) без innerHTML.
+ * @param {"success"|"failed"|"timeout"} kind
+ */
+function renderFinalState(kind) {
+  const container = document.getElementById("pay-waiting-state");
+  container.replaceChildren();
+
+  const icon = document.createElement("i");
+  const text = document.createElement("span");
+
+  if (kind === "success") {
+    icon.className = "fa-solid fa-circle-check text-emerald-400";
+    text.textContent = " Оплата прошла успешно, подписка активирована!";
+  } else if (kind === "failed") {
+    icon.className = "fa-solid fa-circle-xmark text-rose-400";
+    text.textContent = " Оплата не прошла. Попробуйте ещё раз через личный кабинет.";
+  } else {
+    icon.className = "fa-solid fa-clock text-dim";
+    text.textContent = " Подтверждение задерживается — обновите эту страницу через пару минут " +
+      "или проверьте статус в личном кабинете.";
+  }
+
+  container.append(icon, text);
+}
+
+/**
+ * Поллит /api/subscription, пока payment_pending не станет false
+ * (или не истечёт MAX_POLL_ATTEMPTS) - вебхук UDM Pay приходит
+ * асинхронно, точное время неизвестно.
+ *
+ * Успех определяется сравнением paid_periods с baseline (снятым на
+ * сервере ДО создания заказа и переданным через returnLink) - а не через
+ * is_active/status: если пользователь уже был активен (например, меняет
+ * тариф), status не меняется что при успехе, что при отказе, а вот
+ * paid_periods увеличивается только при подтверждённой оплате.
+ */
+async function pollUntilResolved(baselinePaidPeriods) {
+  for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
+    try {
+      const status = await fetchSubscriptionStatus();
+      if (!status.payment_pending) {
+        renderFinalState(status.paid_periods > baselinePaidPeriods ? "success" : "failed");
+        return;
+      }
+    } catch (error) {
+      console.error("Subscription poll error:", error);
+    }
+    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+  }
+  renderFinalState("timeout");
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const baseline = Number(document.getElementById("pay-waiting-state").dataset.baselinePaidPeriods);
+  pollUntilResolved(baseline);
+});
+</script>
+{% endblock %}

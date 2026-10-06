@@ -1,0 +1,503 @@
+{% extends "base.html" %}
+
+{# ═══════════════════════════════════════════════════════════════
+   HAPP.HTML — транзакционная посадочная под кластер C1 (ключи/подписка
+   для Happ) + транзакционный подкуст C6 (vless ключи/конфиги).
+
+   ВАЖНО о разведении со статьёй /blog/happ-vpn-obzor: статья отвечает
+   на вопрос «что такое Happ» (информационный интент), эта страница — на
+   «дай ключ/подписку» (транзакционный). Поэтому здесь НЕТ вводного
+   раздела «что такое Happ»: дублирование создало бы каннибализацию
+   двух URL по одному кусту. Объяснение — ссылкой в конце.
+   ═══════════════════════════════════════════════════════════════ #}
+
+{% block title %}Ключ и подписка для Happ — Horizance VPN{% endblock %}
+{% block meta_description %}Готовая ссылка-подписка для приложения Happ: 24 часа бесплатно без карты и регистрации, дальше {{ settings.default_price }} ₽ в месяц. VLESS Reality, серверы в Европе, до 3 устройств.{% endblock %}
+{% block meta_keywords %}ключ для happ, подписка happ, happ vpn ключи, хапп впн ключи, ключи для happ vpn, vless ключи, конфиг для happ, купить подписку happ{% endblock %}
+{% block canonical %}https://horizancevpn.com/happ{% endblock %}
+{% block og_title %}Ключ и подписка для Happ — Horizance VPN{% endblock %}
+{% block og_description %}Рабочая ссылка-подписка для Happ за пару минут: 24 часа бесплатно, дальше {{ settings.default_price }} ₽ в месяц.{% endblock %}
+
+{% block content %}
+
+<!-- ═══════════════ HERO — сразу действие, без вводного объяснения ═══════════════ -->
+<section class="relative overflow-hidden border-b border-line">
+  <div class="absolute inset-0 -z-10 opacity-40"
+       style="background: radial-gradient(60% 50% at 50% 0%, #2563eb33, transparent 70%), radial-gradient(40% 40% at 85% 20%, #22d3ee22, transparent 70%);"
+       aria-hidden="true"></div>
+
+  <div class="max-w-5xl mx-auto px-6 pt-16 pb-14 text-center">
+
+    <div class="inline-flex items-center gap-2 text-xs font-mono text-dim border border-line2 rounded-full px-4 py-1.5 mb-7 bg-surface">
+      <span class="relative flex h-2 w-2">
+        <span class="connect-line absolute inline-flex h-full w-full rounded-full bg-emerald-400"></span>
+      </span>
+      <span>VLESS · Reality · ссылка-подписка для Happ</span>
+    </div>
+
+    <h1 class="text-4xl md:text-5xl font-extrabold tracking-tight leading-[1.08] mb-5">
+      Ключ и подписка <span class="text-primary-light">для Happ</span>
+    </h1>
+
+    <p class="text-lg text-dim max-w-2xl mx-auto mb-9 leading-relaxed">
+      Horizance выдаёт готовую ссылку-подписку, которую нужно вставить в приложение Happ.
+      Первые 24 часа — бесплатно, без карты и регистрации. Дальше подписка
+      {{ settings.default_price }}&nbsp;₽ в месяц: одна ссылка подключает сразу все серверы,
+      переключение между ними — прямо в приложении.
+    </p>
+
+    <div class="flex flex-col sm:flex-row gap-3 justify-center">
+      <form method="post" action="/trial/connect" data-busy="vpn" data-t="trial_connect">
+        <button type="submit"
+                onclick="if(window.ym) ym({{ settings.YANDEX_METRIKA_COUNTER_ID }}, 'reachGoal', 'happ_get_link'); if(window.gtag) gtag('event', 'happ_get_link'); if(window.clarity) clarity('event', 'happ_get_link');"
+                class="w-full sm:w-auto bg-primary hover:bg-primary-light text-white font-semibold rounded-xl px-7 py-4 text-base transition-colors cursor-pointer">
+          Получить ключ на 24 часа
+        </button>
+      </form>
+      <a href="#pricing"
+         class="border border-line2 hover:border-faint hover:bg-surface2 text-ink2 font-semibold rounded-xl px-7 py-4 text-base transition-colors">
+        Подписка — {{ settings.default_price }}&nbsp;₽ в месяц
+      </a>
+    </div>
+
+    <p class="text-xs text-faint mt-6">
+      Ключ выдаётся сразу на странице · Приложение Happ должно быть установлено —
+      <a href="#install" class="underline hover:text-dim transition-colors">ссылки на все платформы ниже</a>
+    </p>
+  </div>
+</section>
+
+<!-- ═══════════════ ТРИ ШАГА ═══════════════ -->
+<section class="border-b border-line">
+  <div class="max-w-5xl mx-auto px-6 py-14">
+    <h2 class="text-2xl font-bold tracking-tight mb-10">Что нужно, чтобы Happ заработал</h2>
+    <ol class="grid md:grid-cols-3 gap-8">
+      <li>
+        <div class="text-primary-light font-mono text-sm mb-3">01 · Приложение</div>
+        <h3 class="font-semibold text-ink2 mb-2">Установите Happ</h3>
+        <p class="text-sm text-dim leading-relaxed">Клиент бесплатный и есть на Android, iOS, Windows, macOS и Linux. Без него ссылка сама по себе ничего не открывает.</p>
+      </li>
+      <li>
+        <div class="text-primary-light font-mono text-sm mb-3">02 · Ключ</div>
+        <h3 class="font-semibold text-ink2 mb-2">Получите ссылку-подписку</h3>
+        <p class="text-sm text-dim leading-relaxed">Кнопка выше выдаёт ссылку на 24 часа без карты и регистрации. Постоянная подписка оформляется в Telegram-боте.</p>
+      </li>
+      <li>
+        <div class="text-primary-light font-mono text-sm mb-3">03 · Подключение</div>
+        <h3 class="font-semibold text-ink2 mb-2">Добавьте ссылку в Happ</h3>
+        <p class="text-sm text-dim leading-relaxed">Happ откроет её сам, либо скопируйте адрес и добавьте вручную как подписку. Серверы появятся в списке, останется нажать подключение.</p>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<!-- ═══════════════ УСТАНОВКА КЛИЕНТА ═══════════════ -->
+<section id="install" class="border-b border-line bg-surface/40">
+  <div class="max-w-5xl mx-auto px-6 py-14">
+    <h2 class="text-2xl font-bold tracking-tight mb-3">Скачать Happ</h2>
+    <p class="text-dim max-w-2xl mb-8 leading-relaxed">
+      Ссылки ведут в официальные магазины приложений и в релизы разработчика Happ.
+      Ключ Horizance одинаковый для всех платформ — меняется только устройство, на котором он используется.
+    </p>
+
+    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+      {% for name, icon_class, url, is_full in os_buttons %}
+      <a href="{{ url }}" target="_blank" rel="noopener noreferrer"
+         onclick="if(window.ym) ym({{ settings.YANDEX_METRIKA_COUNTER_ID }}, 'reachGoal', 'happ_download_client', {os: '{{ name }}'}); if(window.gtag) gtag('event', 'happ_download_client', {os: '{{ name }}'}); if(window.clarity) clarity('event', 'happ_download_client');"
+         class="bg-surface border border-line rounded-2xl p-5 text-center transition-all duration-150 hover:border-faint hover:bg-surface2 group">
+        <i class="{{ icon_class }} text-2xl text-dim mb-2 group-hover:text-white transition-colors" aria-hidden="true"></i>
+        <div class="text-sm font-semibold text-ink2">Happ для {{ name }}</div>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ ТЕРМИНОЛОГИЯ: ключ / конфиг / подписка / ссылка (+ подкуст vless ключи) ═══════════════ -->
+<section class="border-b border-line">
+  <div class="max-w-5xl mx-auto px-6 py-14">
+    <h2 class="text-2xl font-bold tracking-tight mb-3">Ключ, конфиг, подписка, ссылка — в чём разница</h2>
+    <p class="text-dim max-w-3xl mb-8 leading-relaxed">
+      В разговоре и в поиске эти слова используют как синонимы, и чаще всего имеют в виду одно и то же —
+      строку, которую нужно вставить в Happ. Разница всё-таки есть, и она объясняет, почему один
+      «ключ» перестаёт работать через неделю, а другой продолжает.
+    </p>
+
+    <div class="grid md:grid-cols-2 gap-5">
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <i class="fa-solid fa-key text-primary text-xl mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">Ключ, конфиг, VLESS-ссылка</h3>
+        <p class="text-sm text-dim leading-relaxed">
+          Одна строка вида <code>vless://…</code> — адрес конкретного сервера и параметры подключения к нему.
+          Если этот сервер выключат или он окажется недоступен, строка становится бесполезной:
+          в ней зашит один-единственный адрес.
+        </p>
+      </div>
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <i class="fa-solid fa-arrows-rotate text-primary text-xl mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">Подписка (URL подписки)</h3>
+        <p class="text-sm text-dim leading-relaxed">
+          Ссылка не на сервер, а на список серверов. Happ обращается по ней и подтягивает актуальный
+          набор — если состав меняется, в приложении он обновляется сам, без повторной настройки.
+          Horizance выдаёт именно такую ссылку.
+        </p>
+      </div>
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <i class="fa-solid fa-qrcode text-primary text-xl mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">QR-код</h3>
+        <p class="text-sm text-dim leading-relaxed">
+          Та же ссылка, только в виде картинки — удобно, когда конфигурацию получили на компьютере,
+          а подключить нужно телефон. Telegram-бот присылает оба варианта сразу.
+        </p>
+      </div>
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <i class="fa-solid fa-up-right-from-square text-primary text-xl mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">Ссылка, которая открывает приложение</h3>
+        <p class="text-sm text-dim leading-relaxed">
+          То, что присылает бот, выглядит как обычный веб-адрес и не начинается с <code>vless://</code>.
+          Это не ошибка: страница по такому адресу сама передаёт подписку в Happ и открывает его.
+          Внутрь приложения при этом попадает всё тот же адрес подписки.
+        </p>
+      </div>
+    </div>
+
+    <p class="text-dim max-w-3xl mt-8 leading-relaxed">
+      Практический вывод простой: одиночный VLESS-ключ живёт ровно столько, сколько живёт сервер,
+      адрес которого в нём записан. Ссылка-подписка переживает смену серверов, потому что каждый
+      раз получает актуальный список.
+    </p>
+  </div>
+</section>
+
+<!-- ═══════════════ ЧТО ПОЯВЛЯЕТСЯ В ПРИЛОЖЕНИИ ПОСЛЕ ДОБАВЛЕНИЯ ССЫЛКИ ═══════════════ -->
+<section class="border-b border-line">
+  <div class="max-w-5xl mx-auto px-6 py-14">
+    <h2 class="text-2xl font-bold tracking-tight mb-3">Что появляется в приложении после добавления ссылки</h2>
+    <p class="text-dim max-w-3xl mb-8 leading-relaxed">
+      Дальше в дело вступают уже элементы интерфейса Happ, а не то, что было записано в ссылке.
+      Знать про них стоит: половина вопросов в поддержку — про то, что видно на этом экране.
+    </p>
+
+    <div class="grid md:grid-cols-3 gap-5">
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <i class="fa-solid fa-server text-primary text-xl mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">Список серверов</h3>
+        <p class="text-sm text-dim leading-relaxed">
+          Подписка разворачивается в набор узлов. Их можно переключать вручную и выбирать тот,
+          который в данный момент отвечает быстрее — доплачивать за это не нужно, все узлы входят
+          в одну подписку.
+        </p>
+      </div>
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <i class="fa-solid fa-gauge-high text-primary text-xl mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">Проверка задержки</h3>
+        <p class="text-sm text-dim leading-relaxed">
+          У каждого узла показывается задержка в миллисекундах. Если вместо числа появляется
+          «Тайм-аут», узел в этот момент не отвечает — обычно достаточно выбрать соседний.
+        </p>
+      </div>
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <i class="fa-solid fa-arrows-rotate text-primary text-xl mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">Обновление подписки</h3>
+        <p class="text-sm text-dim leading-relaxed">
+          Кнопка обновления заново запрашивает список у сервера подписки. Это то, что нужно нажать,
+          если серверы поменялись, а в приложении остался старый набор.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ HAPP PLUS — развод путаницы ═══════════════ -->
+<section class="border-b border-line bg-surface/40">
+  <div class="max-w-5xl mx-auto px-6 py-14">
+    <h2 class="text-2xl font-bold tracking-tight mb-3">Подписка Happ Plus — это не доступ к серверу</h2>
+    <div class="grid md:grid-cols-[1.2fr_1fr] gap-8 items-start">
+      <div class="text-dim leading-relaxed space-y-4 max-w-2xl">
+        <p>
+          Happ Plus — платная версия самого приложения: она расширяет возможности интерфейса и
+          дополнительные функции клиента. Серверов она не даёт — приложение по-прежнему подключается
+          к тому серверу, ссылку на который вы в него добавили.
+        </p>
+        <p>
+          Поэтому «купить Happ Plus» и «купить подписку на VPN» — две разные покупки у двух разных
+          сторон. Оплата Plus не откроет заблокированные сайты, если в приложении нет рабочей
+          ссылки-подписки. И наоборот: подписка Horizance работает в обычной бесплатной версии Happ,
+          покупать Plus для этого не нужно.
+        </p>
+      </div>
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <div class="text-sm font-semibold text-dim mb-3">Кто за что отвечает</div>
+        <ul class="text-sm text-dim space-y-3">
+          <li><span class="text-ink2 font-semibold">Happ</span> — приложение: интерфейс, подключение, правила маршрутизации.</li>
+          <li><span class="text-ink2 font-semibold">Horizance</span> — серверы, ссылка-подписка, оплата и поддержка.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ БЕСПЛАТНЫЕ КЛЮЧИ — честный ответ ═══════════════ -->
+<section class="border-b border-line">
+  <div class="max-w-5xl mx-auto px-6 py-14">
+    <h2 class="text-2xl font-bold tracking-tight mb-3">Бесплатные ключи для Happ: почему они быстро перестают работать</h2>
+    <div class="text-dim leading-relaxed space-y-4 max-w-3xl">
+      <p>
+        Публичные ключи, которые выкладывают в чатах и на сайтах-сборниках, ведут на один сервер,
+        адрес которого одновременно узнают тысячи человек. Дальше происходит одно из двух: сервер
+        не выдерживает нагрузку и скорость падает до неработоспособной, либо владелец его выключает.
+        Обычно это вопрос часов, реже — нескольких дней.
+      </p>
+      <p>
+        Честная бесплатная альтернатива у нас одна и она конечная по времени:
+        <a href="/trial" class="text-primary hover:underline">пробный доступ на 24 часа</a> —
+        тот же продукт, что и по подписке, без урезанной скорости и без карты. Если подключаться
+        через <a href="/go/bot?src=happ" class="text-primary hover:underline" target="_blank" rel="noopener">Telegram-бота</a>,
+        новым пользователям бесплатный период даётся длиннее — {{ settings.trial_days }} дней.
+      </p>
+      <p>
+        Обещать «бесплатно навсегда» мы не будем: серверы, трафик и поддержка стоят денег, и сервис,
+        который делает вид, что это не так, зарабатывает каким-то другим способом.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ HAPP НА КОМПЬЮТЕРЕ ═══════════════ -->
+<section class="border-b border-line bg-surface/40">
+  <div class="max-w-5xl mx-auto px-6 py-14">
+    <h2 class="text-2xl font-bold tracking-tight mb-3">Happ на компьютере: Windows, macOS и Linux</h2>
+    <div class="grid md:grid-cols-[1.2fr_1fr] gap-8 items-start">
+      <div class="text-dim leading-relaxed space-y-4 max-w-2xl">
+        <p>
+          Настольная версия Happ ставится как обычная программа: установщик для Windows,
+          образ для macOS и пакет для Linux лежат в релизах разработчика — ссылки выше.
+          Ключ используется тот же самый, что и на телефоне, отдельный получать не нужно.
+        </p>
+        <p>
+          Удобный порядок действий, если подписку оформляли с телефона: откройте ссылку на
+          компьютере через тот же Telegram-бот или скопируйте адрес подписки из приложения на
+          телефоне. QR-код пригодится в обратной ситуации — когда конфигурацию получили на
+          компьютере, а подключить нужно телефон.
+        </p>
+        <p>
+          На компьютере чаще, чем на телефоне, встречается одна помеха: другой VPN-клиент,
+          который остался в автозагрузке. Два туннеля одновременно не работают, и это первое,
+          что стоит проверить, если подключение не поднимается.
+        </p>
+      </div>
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <div class="text-sm font-semibold text-dim mb-3">Одна подписка — три устройства</div>
+        <p class="text-sm text-dim leading-relaxed">
+          Телефон, ноутбук и, например, планшет могут быть подключены одновременно.
+          Списывается за это одна подписка, а не три.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ ТАРИФЫ ═══════════════ -->
+<section id="pricing" class="border-b border-line bg-surface/40">
+  <div class="max-w-5xl mx-auto px-6 py-14">
+    <h2 class="text-2xl font-bold tracking-tight mb-3">Сколько стоит подписка для Happ</h2>
+    <p class="text-dim max-w-2xl mb-10 leading-relaxed">
+      Одна подписка — одна ссылка на все серверы, до 3 устройств одновременно, без ограничений
+      скорости и объёма трафика. Оплата по СБП или криптовалютой в Telegram-боте.
+    </p>
+
+    <div class="grid md:grid-cols-3 gap-5">
+      <div class="bg-surface border border-line rounded-2xl p-7">
+        <div class="text-sm font-semibold text-dim mb-1">Пробный доступ</div>
+        <div class="text-3xl font-extrabold mb-4">0&nbsp;₽<span class="text-sm text-faint font-normal"> / 24 часа</span></div>
+        <ul class="text-sm text-dim space-y-2 mb-6">
+          <li>Ссылка выдаётся сразу на сайте</li>
+          <li>Без карты и без регистрации</li>
+          <li>Скорость не урезана</li>
+        </ul>
+        <form method="post" action="/trial/connect" data-busy="vpn" data-t="trial_connect">
+          <button type="submit" class="w-full text-center border border-line2 hover:border-faint hover:bg-surface2 text-ink2 font-semibold rounded-xl py-3 transition-colors cursor-pointer">
+            Получить ключ
+          </button>
+        </form>
+      </div>
+
+      <div class="bg-surface border-2 border-primary rounded-2xl p-7 relative">
+        <span class="absolute -top-3 left-7 bg-primary text-white text-xs font-semibold px-3 py-1 rounded-full">Популярный</span>
+        <div class="text-sm font-semibold text-dim mb-1">Месяц</div>
+        <div class="text-3xl font-extrabold mb-4">{{ settings.default_price }}&nbsp;₽<span class="text-sm text-faint font-normal"> / мес</span></div>
+        <ul class="text-sm text-dim space-y-2 mb-6">
+          <li>До 3 устройств</li>
+          <li>Все серверы в одной ссылке</li>
+          <li>Поддержка в боте</li>
+        </ul>
+        <a href="/auth" class="block text-center bg-primary hover:bg-primary-light text-white font-semibold rounded-xl py-3 transition-colors">Оформить</a>
+      </div>
+
+      <div class="bg-surface border border-line rounded-2xl p-7">
+        <div class="text-sm font-semibold text-dim mb-1">Год</div>
+        <div class="text-3xl font-extrabold mb-4">{{ settings.yearly_price }}&nbsp;₽<span class="text-sm text-faint font-normal"> / год</span></div>
+        <ul class="text-sm text-dim space-y-2 mb-6">
+          <li>До 3 устройств</li>
+          <li>Все серверы в одной ссылке</li>
+          <li>Дешевле помесячной оплаты</li>
+        </ul>
+        <a href="/auth" class="block text-center border border-line2 hover:border-faint hover:bg-surface2 text-ink2 font-semibold rounded-xl py-3 transition-colors">Оформить</a>
+      </div>
+    </div>
+    <p class="text-xs text-faint mt-6">Актуальная сумма всегда показывается в боте перед оплатой.</p>
+  </div>
+</section>
+
+<!-- ═══════════════ ПРОДЛЕНИЕ И СМЕНА УСТРОЙСТВА ═══════════════ -->
+<section class="border-b border-line">
+  <div class="max-w-5xl mx-auto px-6 py-14">
+    <h2 class="text-2xl font-bold tracking-tight mb-3">Как продлить подписку и подключить второе устройство</h2>
+    <div class="grid md:grid-cols-2 gap-5">
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <i class="fa-solid fa-clock text-primary text-xl mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">Продление</h3>
+        <p class="text-sm text-dim leading-relaxed">
+          Продление оформляется в Telegram-боте: он показывает текущий статус и дату окончания.
+          После оплаты нужно получить новую ссылку — прежняя, если она успела деактивироваться,
+          сама не восстанавливается.
+        </p>
+      </div>
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <i class="fa-solid fa-shuffle text-primary text-xl mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">Второе и третье устройство</h3>
+        <p class="text-sm text-dim leading-relaxed">
+          Подписка остаётся одна. В боте выбирается операционная система нового устройства, и он
+          присылает ссылку и QR-код именно под него — отдельно оплачивать ничего не нужно.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ ПЕРЕЛИНКОВКА ═══════════════ -->
+<section class="border-b border-line bg-surface/40">
+  <div class="max-w-5xl mx-auto px-6 py-14">
+    <h2 class="text-2xl font-bold tracking-tight mb-8">Что почитать дальше</h2>
+    <div class="grid sm:grid-cols-2 md:grid-cols-3 gap-5">
+      <a href="/happ/iphone" class="block bg-surface border border-line rounded-2xl p-6 hover:border-faint transition-colors">
+        <i class="fa-brands fa-apple text-primary text-lg mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">Happ пропал из App Store</h3>
+        <p class="text-sm text-dim leading-relaxed">Что поставить на iPhone вместо него и как перенести ключ, ничего не меняя в подписке.</p>
+      </a>
+      <a href="/happ/oshibki" class="block bg-surface border border-line rounded-2xl p-6 hover:border-faint transition-colors">
+        <i class="fa-solid fa-triangle-exclamation text-primary text-lg mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">Ошибки Happ и что они значат</h3>
+        <p class="text-sm text-dim leading-relaxed">Ошибка ядра Xray, TLS-рукопожатие, гео-файлы, 404 и 502 — разбор с конкретными действиями.</p>
+      </a>
+      <a href="/blog/happ-vpn-obzor" class="block bg-surface border border-line rounded-2xl p-6 hover:border-faint transition-colors">
+        <i class="fa-solid fa-circle-question text-primary text-lg mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">Что такое Happ и чем он не является</h3>
+        <p class="text-sm text-dim leading-relaxed">Подробный разбор приложения: почему это клиент, а не VPN-сервис, и что из этого следует.</p>
+      </a>
+      <a href="/blog/kak-podklyuchit-horizance" class="block bg-surface border border-line rounded-2xl p-6 hover:border-faint transition-colors">
+        <i class="fa-solid fa-sliders text-primary text-lg mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">Подключение по шагам</h3>
+        <p class="text-sm text-dim leading-relaxed">Пошаговая инструкция для Android, iOS и компьютера — со скриншотами последовательности действий.</p>
+      </a>
+      <a href="/trial" class="block bg-surface border border-line rounded-2xl p-6 hover:border-faint transition-colors">
+        <i class="fa-solid fa-circle-play text-primary text-lg mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">Пробный доступ на 24 часа</h3>
+        <p class="text-sm text-dim leading-relaxed">Та же страница получения ключа, с инструкцией по установке клиента для каждой платформы.</p>
+      </a>
+      <a href="/status" class="block bg-surface border border-line rounded-2xl p-6 hover:border-faint transition-colors">
+        <i class="fa-solid fa-circle-check text-primary text-lg mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">Что работает сейчас</h3>
+        <p class="text-sm text-dim leading-relaxed">Страница статуса: протоколы, сервисы и дата последней проверки.</p>
+      </a>
+      <a href="/blog/vless-vs-wireguard-vs-shadowsocks" class="block bg-surface border border-line rounded-2xl p-6 hover:border-faint transition-colors">
+        <i class="fa-solid fa-lock text-primary text-lg mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">VLESS, WireGuard, Shadowsocks</h3>
+        <p class="text-sm text-dim leading-relaxed">Чем протоколы отличаются друг от друга и почему для России это имеет значение.</p>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ FAQ ═══════════════ -->
+<section class="border-b border-line">
+  <div class="max-w-3xl mx-auto px-6 py-14">
+    <h2 class="text-2xl font-bold tracking-tight mb-8 text-center">Частые вопросы про ключи и подписку</h2>
+
+    <div class="space-y-2">
+      {% for item in faq %}
+      <details class="bg-surface border border-line2 rounded-xl group">
+        <summary class="flex items-center justify-between px-5 py-4 cursor-pointer select-none text-ink2 text-sm font-medium hover:text-white transition-colors">
+          <span>{{ item.q }}</span>
+          <i class="fa-solid fa-chevron-down text-mute text-xs ml-3 flex-shrink-0 group-open:rotate-180 transition-transform" aria-hidden="true"></i>
+        </summary>
+        <div class="px-5 pb-4 pt-1 text-dim text-sm leading-relaxed border-t border-line">
+          {{ item.a }}
+        </div>
+      </details>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ FOOTER CTA ═══════════════ -->
+<section>
+  <div class="max-w-3xl mx-auto px-6 py-16 text-center">
+    <h2 class="text-2xl font-bold tracking-tight mb-4">Проверьте, как это работает у вас</h2>
+    <p class="text-dim mb-8">24 часа бесплатно. Без карты, без обязательств.</p>
+    <form method="post" action="/trial/connect" data-busy="vpn" data-t="trial_connect">
+      <button type="submit" class="inline-block bg-primary hover:bg-primary-light text-white font-semibold rounded-xl px-8 py-4 transition-colors cursor-pointer">
+        Получить ключ для Happ
+      </button>
+    </form>
+  </div>
+</section>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {"@type": "ListItem", "position": 1, "name": "Главная", "item": "https://horizancevpn.com/"},
+    {"@type": "ListItem", "position": 2, "name": "Ключ и подписка для Happ", "item": "https://horizancevpn.com/happ"}
+  ]
+}
+</script>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Product",
+  "name": "Подписка Horizance VPN для приложения Happ",
+  "description": "Ссылка-подписка VLESS Reality для клиента Happ: серверы в Европе, до 3 устройств, без ограничений скорости и трафика.",
+  "image": "https://horizancevpn.com/static/img/logo.png",
+  "brand": {"@type": "Brand", "name": "Horizance"},
+  "url": "https://horizancevpn.com/happ",
+  "offers": {
+    "@type": "AggregateOffer",
+    "lowPrice": "{{ settings.default_price }}",
+    "highPrice": "{{ settings.yearly_price }}",
+    "priceCurrency": "RUB",
+    "offerCount": "2",
+    "url": "https://horizancevpn.com/happ",
+    "availability": "https://schema.org/InStock"
+  }
+}
+</script>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {% for item in faq %}
+    {
+      "@type": "Question",
+      "name": {{ item.q | tojson }},
+      "acceptedAnswer": {"@type": "Answer", "text": {{ item.a | tojson }}}
+    }{{ "," if not loop.last }}
+    {% endfor %}
+  ]
+}
+</script>
+{% endblock %}

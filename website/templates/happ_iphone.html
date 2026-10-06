@@ -1,0 +1,288 @@
+{% extends "base.html" %}
+
+{# ═══════════════════════════════════════════════════════════════
+   HAPP_IPHONE.HTML — /happ/iphone
+
+   Страница написана под конкретный спрос, а не «на всякий случай»:
+   Wordstat на 06.09.2026 даёт «happ не работает» 25 967 и «happ на айфон»
+   24 696 в месяц, а Apple как раз убрала Happ из российского App Store
+   (id6788279553 отдаёт 404 с 07.08.2026). В Google весь наш органический
+   трафик и так приходит по запросам со словом Happ — то есть спрос растёт
+   ровно там, где мы уже ранжируемся.
+
+   Одновременно это разгрузка поддержки: обращения «неизвестное действие
+   deepLink» и «The subscription URL is not valid» — это оно.
+   ═══════════════════════════════════════════════════════════════ #}
+
+{% block title %}Happ пропал из App Store на iPhone — что делать{% endblock %}
+{% block meta_description %}Happ убрали из российского App Store. Что поставить вместо него на iPhone (INCY), как перенести ссылку-подписку и как вернуть сам Happ через смену страны Apple ID.{% endblock %}
+{% block meta_keywords %}happ не работает, happ на айфон, happ пропал из app store, happ удалили, чем заменить happ, happ ios, аналог happ, happ не скачивается{% endblock %}
+{% block canonical %}https://horizancevpn.com/happ/iphone{% endblock %}
+{% block og_title %}Happ пропал из App Store на iPhone — что делать{% endblock %}
+{% block og_description %}Приложение убрали из российского App Store. Ключ-подписка при этом продолжает работать — нужен только другой клиент.{% endblock %}
+
+{% block content %}
+
+<!-- ═══════════════ HERO ═══════════════ -->
+<section class="relative overflow-hidden border-b border-line">
+  <div class="absolute inset-0 -z-10 opacity-40"
+       style="background: radial-gradient(60% 50% at 50% 0%, #2563eb33, transparent 70%), radial-gradient(40% 40% at 85% 20%, #22d3ee22, transparent 70%);"
+       aria-hidden="true"></div>
+
+  <div class="max-w-5xl mx-auto px-6 pt-16 pb-14 text-center">
+
+    <div class="inline-flex items-center gap-2 text-xs font-mono text-dim border border-line2 rounded-full px-4 py-1.5 mb-7 bg-surface">
+      <span class="relative flex h-2 w-2">
+        <span class="connect-line absolute inline-flex h-full w-full rounded-full bg-emerald-400"></span>
+      </span>
+      <span>iPhone · App Store · сентябрь 2026</span>
+    </div>
+
+    <h1 class="text-4xl md:text-5xl font-extrabold tracking-tight leading-[1.08] mb-5">
+      Happ пропал из App Store <span class="text-primary-light">на iPhone</span>
+    </h1>
+
+    <p class="text-lg text-dim max-w-2xl mx-auto mb-9 leading-relaxed">
+      Приложение убрали из российского App Store. Ваша ссылка-подписка при этом
+      никуда не делась и продолжает работать — поменять нужно только приложение,
+      в которое она вставлена. Занимает пару минут.
+    </p>
+
+    <div class="flex flex-col sm:flex-row gap-3 justify-center">
+      <a href="/go/app/INCY?src=happ_iphone" target="_blank" rel="noopener noreferrer"
+         class="inline-flex items-center justify-center gap-3 bg-primary hover:bg-primary-light text-white font-semibold rounded-xl px-8 py-4 transition-colors">
+        <img src="{{ static_v('/static/img/apps/incy.webp') }}" alt="" width="28" height="28" class="w-7 h-7 rounded-md">
+        Поставить INCY
+      </a>
+      <a href="/trial"
+         class="border border-line2 hover:border-faint hover:bg-surface2 text-ink2 font-semibold rounded-xl px-8 py-4 transition-colors">
+        Получить ключ на 24 часа
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ ЧТО СЛУЧИЛОСЬ ═══════════════ -->
+<section class="border-b border-line">
+  <div class="max-w-5xl mx-auto px-6 py-14">
+    <h2 class="text-2xl font-bold tracking-tight mb-3">Что именно произошло</h2>
+    <p class="text-dim max-w-3xl mb-8 leading-relaxed">
+      Apple убирает приложения из витрины конкретной страны, когда получает
+      соответствующее требование. Так уже было с Happ весной, тогда разработчик
+      выпустил приложение заново под названием Happ&nbsp;—&nbsp;Proxy Utility Plus,
+      и оно проработало несколько месяцев. В августе сняли и его.
+    </p>
+
+    <div class="grid md:grid-cols-3 gap-4">
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <i class="fa-solid fa-mobile-screen text-primary text-lg mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">Уже установленное работает</h3>
+        <p class="text-sm text-dim leading-relaxed">
+          Если Happ стоит на телефоне, он никуда не денется и продолжит подключаться.
+          Пропала только возможность установить его заново.
+        </p>
+      </div>
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <i class="fa-solid fa-key text-primary text-lg mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">Ключ не изменился</h3>
+        <p class="text-sm text-dim leading-relaxed">
+          Ссылка-подписка — это обычный адрес, а не что-то придуманное для Happ.
+          Её понимают и другие приложения.
+        </p>
+      </div>
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <i class="fa-solid fa-laptop text-primary text-lg mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">Компьютеров это не касается</h3>
+        <p class="text-sm text-dim leading-relaxed">
+          Версии для Windows, macOS и Linux ставятся напрямую с сайта разработчика,
+          мимо App Store. Android — тоже без изменений.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ РЕШЕНИЕ 1 ═══════════════ -->
+<section class="border-b border-line bg-surface/40">
+  <div class="max-w-5xl mx-auto px-6 py-14">
+    <h2 class="text-2xl font-bold tracking-tight mb-3">Способ первый: поставить INCY</h2>
+    <p class="text-dim max-w-3xl mb-8 leading-relaxed">
+      INCY — бесплатное приложение того же назначения. Оно есть в российском
+      App Store для iPhone, iPad, Mac и Apple TV, а также для Android, Windows
+      и Linux. Оно поддерживает тот же протокол, что и Happ, поэтому ключ
+      подходит без переделок.
+    </p>
+
+    <ol class="space-y-4 max-w-3xl">
+      <li class="bg-surface border border-line rounded-2xl p-6 flex gap-4">
+        <span class="shrink-0 w-8 h-8 rounded-full bg-primary/20 text-primary-light font-bold flex items-center justify-center">1</span>
+        <div>
+          <h3 class="font-semibold text-ink2 mb-1">Установите приложение</h3>
+          <p class="text-sm text-dim leading-relaxed">
+            <a href="/go/app/INCY?src=happ_iphone" target="_blank" rel="noopener noreferrer"
+               class="text-primary-light underline">INCY в App Store</a> — бесплатно, регистрация не нужна.
+          </p>
+        </div>
+      </li>
+      <li class="bg-surface border border-line rounded-2xl p-6 flex gap-4">
+        <span class="shrink-0 w-8 h-8 rounded-full bg-primary/20 text-primary-light font-bold flex items-center justify-center">2</span>
+        <div>
+          <h3 class="font-semibold text-ink2 mb-1">Скопируйте адрес подписки</h3>
+          <p class="text-sm text-dim leading-relaxed">
+            Это ссылка вида <span class="font-mono text-ink2">horizancevpn.com/sub/…</span>.
+            Её присылает бот вместе с конфигурацией, и она же показана на странице,
+            которая открывается по кнопке «Ваша личная конфигурация».
+          </p>
+        </div>
+      </li>
+      <li class="bg-surface border border-line rounded-2xl p-6 flex gap-4">
+        <span class="shrink-0 w-8 h-8 rounded-full bg-primary/20 text-primary-light font-bold flex items-center justify-center">3</span>
+        <div>
+          <h3 class="font-semibold text-ink2 mb-1">Добавьте её в приложение</h3>
+          <p class="text-sm text-dim leading-relaxed">
+            В INCY нажмите «+» и вставьте адрес из буфера обмена — добавьте его
+            как подписку, а не как отдельный сервер. Появятся все наши серверы.
+            Дальше выбираете любой и включаете соединение. На странице
+            «Ваша личная конфигурация» есть кнопка, которая добавляет подписку
+            в INCY в одно касание.
+          </p>
+        </div>
+      </li>
+    </ol>
+
+    <p class="text-sm text-dim mt-6 max-w-3xl leading-relaxed">
+      Обратите внимание: в App Store есть приложения с названиями вроде «Happ VPN»
+      и «Happ VPN Official» от посторонних издателей. К настоящему Happ они
+      отношения не имеют — ставить их не нужно.
+    </p>
+  </div>
+</section>
+
+<!-- ═══════════════ РЕШЕНИЕ 2 ═══════════════ -->
+<section class="border-b border-line">
+  <div class="max-w-5xl mx-auto px-6 py-14">
+    <h2 class="text-2xl font-bold tracking-tight mb-3">Способ второй: вернуть сам Happ</h2>
+    <p class="text-dim max-w-3xl mb-8 leading-relaxed">
+      Приложение осталось в App Store других стран. Какая витрина вам доступна,
+      определяет страна в настройках Apple ID, а не ссылка и не язык телефона —
+      поэтому «открыть американскую ссылку» не помогает, а смена страны помогает.
+    </p>
+
+    <ol class="list-decimal list-inside space-y-2 text-dim max-w-3xl leading-relaxed bg-surface border border-line rounded-2xl p-6">
+      <li>Настройки → ваше имя → «Медиа и покупки» → «Просмотреть учётную запись».</li>
+      <li>«Страна или регион» → «Изменить страну или регион».</li>
+      <li>Выберите любую страну, кроме России. Способ оплаты можно оставить «Нет», если платные приложения не покупаете.</li>
+      <li>Откройте App Store и найдите «Happ - Proxy Utility» — теперь его можно установить.</li>
+      <li>После установки страну можно вернуть обратно: уже установленное приложение продолжит работать.</li>
+    </ol>
+
+    <p class="text-sm text-dim mt-6 max-w-3xl leading-relaxed">
+      Минус способа в том, что на время смены страны недоступны подписки и покупки,
+      оформленные в российской витрине. Если возиться не хочется, первый способ проще.
+    </p>
+  </div>
+</section>
+
+<!-- ═══════════════ ЧАСТЫЕ ОШИБКИ ═══════════════ -->
+<section class="border-b border-line bg-surface/40">
+  <div class="max-w-5xl mx-auto px-6 py-14">
+    <h2 class="text-2xl font-bold tracking-tight mb-8">Что пишет телефон, когда Happ не установлен</h2>
+
+    <div class="grid md:grid-cols-2 gap-4 max-w-4xl">
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <h3 class="font-semibold text-ink2 mb-2">«Неизвестное действие deepLink»</h3>
+        <p class="text-sm text-dim leading-relaxed">
+          Ссылка рассчитана на то, что Happ уже стоит на устройстве, и открывает
+          его напрямую. Когда приложения нет, система не понимает, что делать.
+          Поставьте INCY и добавьте адрес подписки вручную — такая ссылка
+          работает всегда.
+        </p>
+      </div>
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <h3 class="font-semibold text-ink2 mb-2">«The subscription URL is not valid»</h3>
+        <p class="text-sm text-dim leading-relaxed">
+          Чаще всего адрес скопирован не целиком: потерялось начало
+          <span class="font-mono">https://</span> или хвост. Скопируйте его ещё раз
+          полностью. Если повторяется — получите свежую ссылку в боте командой /config.
+        </p>
+      </div>
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <h3 class="font-semibold text-ink2 mb-2">«Не вставляется ссылка»</h3>
+        <p class="text-sm text-dim leading-relaxed">
+          Telegram иногда не отдаёт ссылку по нажатию. Скопируйте её длинным
+          нажатием и вставьте в приложение или в адресную строку браузера.
+        </p>
+      </div>
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <h3 class="font-semibold text-ink2 mb-2">Приложение не находится в поиске</h3>
+        <p class="text-sm text-dim leading-relaxed">
+          Значит витрина у вас российская, а приложения в ней уже нет. Поиск по
+          названию тут не поможет — нужен один из двух способов выше.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ ЧТО ДАЛЬШЕ ═══════════════ -->
+<section class="border-b border-line">
+  <div class="max-w-5xl mx-auto px-6 py-14">
+    <h2 class="text-2xl font-bold tracking-tight mb-8">Что почитать дальше</h2>
+    <div class="grid md:grid-cols-3 gap-4">
+      <a href="/happ" class="block bg-surface border border-line rounded-2xl p-6 hover:border-faint transition-colors">
+        <i class="fa-solid fa-key text-primary text-lg mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">Ключ и подписка для Happ</h3>
+        <p class="text-sm text-dim leading-relaxed">Откуда берётся ссылка, чем ключ отличается от конфига и сколько это стоит.</p>
+      </a>
+      <a href="/happ/oshibki" class="block bg-surface border border-line rounded-2xl p-6 hover:border-faint transition-colors">
+        <i class="fa-solid fa-triangle-exclamation text-primary text-lg mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">Ошибки приложения</h3>
+        <p class="text-sm text-dim leading-relaxed">Разбор сообщений, которые Happ показывает при подключении.</p>
+      </a>
+      <a href="/trial" class="block bg-surface border border-line rounded-2xl p-6 hover:border-faint transition-colors">
+        <i class="fa-solid fa-bolt text-primary text-lg mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">Пробный доступ на 24 часа</h3>
+        <p class="text-sm text-dim leading-relaxed">Ключ без карты и регистрации — проверить, что всё работает на вашем телефоне.</p>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ FAQ ═══════════════ -->
+<section class="border-b border-line">
+  <div class="max-w-3xl mx-auto px-6 py-14">
+    <h2 class="text-2xl font-bold tracking-tight mb-8 text-center">Частые вопросы</h2>
+
+    <div class="space-y-2">
+      {% for item in faq %}
+      <details class="bg-surface border border-line2 rounded-xl group">
+        <summary class="flex items-center justify-between px-5 py-4 cursor-pointer select-none text-ink2 text-sm font-medium hover:text-white transition-colors">
+          <span>{{ item.q }}</span>
+          <i class="fa-solid fa-chevron-down text-mute text-xs ml-3 flex-shrink-0 group-open:rotate-180 transition-transform" aria-hidden="true"></i>
+        </summary>
+        <div class="px-5 pb-4 pt-1 text-dim text-sm leading-relaxed border-t border-line">
+          {{ item.a }}
+        </div>
+      </details>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {% for item in faq %}
+    {
+      "@type": "Question",
+      "name": {{ item.q | tojson }},
+      "acceptedAnswer": {"@type": "Answer", "text": {{ item.a | tojson }}}
+    }{{ "," if not loop.last }}
+    {% endfor %}
+  ]
+}
+</script>
+
+{% endblock %}

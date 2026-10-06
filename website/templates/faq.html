@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+
+<html lang="ru">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>FAQ — Horizance VPN</title>
+  <meta name="description" content="Частые вопросы о Horizance VPN: ошибка 404 в Happ, что делать после оплаты подписки, если ссылка не открывается в приложении."/>
+  <meta name="robots" content="index, follow"/>
+  <link rel="canonical" href="https://horizancevpn.com/faq"/>
+  <style>{{ inline_css() }}</style>
+</head>
+<body class="bg-bg text-ink min-h-screen flex items-center justify-center p-6">
+  <div class="bg-surface border border-line rounded-2xl p-10 w-full max-w-md">
+
+<h1 class="text-2xl font-semibold tracking-tight mb-2 text-center">Частые вопросы</h1>
+<p class="text-mute text-sm text-center mb-8">Помощь по Horizance VPN</p>
+
+{% include "_faq_accordion.html" %}
+
+<p class="mt-8 text-xs text-faint text-center leading-relaxed">
+  Не нашли ответ? Напишите в поддержку
+  <a href="/go/bot?src=faq_page" class="text-blue-600 underline">Telegram-бота</a>
+</p>
+
+  </div>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {% for question, answer in faq.items() %}
+    {
+      "@type": "Question",
+      "name": {{ question | tojson }},
+      "acceptedAnswer": {"@type": "Answer", "text": {{ answer | tojson }}}
+    }{{ "," if not loop.last }}
+    {% endfor %}
+  ]
+}
+</script>
+</body>
+</html>

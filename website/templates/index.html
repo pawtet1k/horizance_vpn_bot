@@ -1,0 +1,791 @@
+{% extends "base.html" %}
+
+{# ═══════════════════════════════════════════════════════════════
+   INDEX.HTML — главная страница Horizance VPN
+   SEO-интенты, закрытые на этой странице (см. wordstat-кластеры):
+   Навигационный/Общий, Лучший VPN/Рейтинги, Обход блокировок/Россия,
+   Бесплатный VPN, Купить/Подписка, Как настроить, Что такое VPN,
+   Технические запросы/Протоколы, Безопасность, Windows/Android/iOS,
+   Расширение для браузера, Telegram, Скачать/Установить
+   ═══════════════════════════════════════════════════════════════ #}
+
+{% block title %}Horizance VPN — рабочий VPN для России на VLESS Reality{% endblock %}
+{% block meta_description %}Horizance VPN — личный VPN на VLESS Reality: работает в России, обходит блокировки. Подключение за 2 минуты. Бесплатный тест 24 часа.{% endblock %}
+{% block meta_keywords %}vpn, впн, русский vpn, vpn в россии, бесплатный vpn, скачать vpn, vpn для андроид, vpn для айфона, vpn для пк, vless, reality, dpi, обход блокировок, vpn расширение, vpn для телеграм{% endblock %}
+{% block canonical %}https://horizancevpn.com/{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* ═══ Hero-анимация «поток через тоннель» (canvas, скрипт в конце страницы):
+     слева — открытый трафик читаемыми строками, в центре — кольцо-вход
+     в туннель, справа — тот же поток снаружи: волны нечитаемого шифра.
+     Маска гасит сцену у краёв контейнера, чтобы поток «приходил из ниоткуда». ═══ */
+  .hero-stream {
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- ═══════════════ HERO — интент: "vpn", "русский vpn", "vpn в россии", "рабочий vpn" ═══════════════ -->
+<section class="relative overflow-hidden border-b border-line">
+  <!-- декоративный сине-зелёный градиент-заглушка под фирменный hero (синий+cyan на чёрном) -->
+  <div class="absolute inset-0 -z-10 opacity-40"
+       style="background: radial-gradient(60% 50% at 50% 0%, #2563eb33, transparent 70%), radial-gradient(40% 40% at 85% 20%, #22d3ee22, transparent 70%);"
+       aria-hidden="true"></div>
+
+  <div class="max-w-5xl mx-auto px-6 pt-20 text-center">
+
+    <!-- "статус-строка" — сигнатурный элемент вместо штампованного градиентного баннера -->
+    <div class="inline-flex items-center gap-2 text-xs font-mono text-dim border border-line2 rounded-full px-4 py-1.5 mb-8 bg-surface">
+      <span class="relative flex h-2 w-2">
+        <span class="connect-line absolute inline-flex h-full w-full rounded-full bg-emerald-400"></span>
+      </span>
+      <span>VLESS · Reality · подключение&nbsp;~1.2с</span>
+    </div>
+
+    <h1 class="text-4xl md:text-6xl font-extrabold tracking-tight leading-[1.05] mb-6">
+      Надёжный VPN <span class="text-primary-light">в России</span><br/>
+      с устойчивым подключением
+    </h1>
+
+    <p class="text-lg text-dim max-w-2xl mx-auto mb-10 leading-relaxed">
+      Horizance — личный VPN на технологии VLESS Reality: она маскирует трафик
+      под обычный HTTPS, поэтому соединение остаётся стабильным даже там, где
+      привычные VPN-сервисы перестают работать. Конфигурацию выдаёт Telegram-бот,
+      а подключаетесь вы в приложении Happ.
+    </p>
+
+    <div class="flex flex-col sm:flex-row gap-3 justify-center">
+      <a href="/trial"
+         class="bg-primary hover:bg-primary-light text-white font-semibold rounded-xl px-7 py-4 text-base transition-colors">
+        Бесплатно на 24 часа
+      </a>
+      <a href="#pricing"
+         class="border border-line2 hover:border-faint hover:bg-surface2 text-ink2 font-semibold rounded-xl px-7 py-4 text-base transition-colors">
+        Смотреть тарифы
+      </a>
+    </div>
+
+    <p class="text-xs text-faint mt-6">Без банковской карты для теста · Отмена в любой момент</p>
+  </div>
+
+  <!-- ═══ Анимированная сцена «поток через тоннель»: слева — открытый трафик,
+       который видит провайдер (читаемые строки стягиваются в жерло), в центре —
+       светящееся кольцо-вход в туннель Horizance, справа — тот же поток снаружи:
+       колышущиеся волны нечитаемого шифра. Рисуется скриптом в конце страницы;
+       при prefers-reduced-motion выводится один статичный кадр. ═══ -->
+  <div class="relative mt-10" aria-hidden="true">
+    <canvas id="hero-stream" class="hero-stream block w-full max-w-6xl mx-auto h-40 md:h-[270px]"></canvas>
+    <div class="max-w-6xl mx-auto px-6 mt-3 flex justify-between font-mono text-[10px] md:text-xs tracking-[0.2em] select-none">
+      <span class="text-[#7f1d1d]">БЕЗ VPN · ТРАФИК ЧИТАЕМ</span>
+      <span class="text-[#4d7c0f]">С HORIZANCE · ШИФР</span>
+    </div>
+  </div>
+</section>
+
+<script>
+/* Hero «поток через тоннель». Бюджет производительности: один canvas,
+   ~300 fillText/кадр, dpr ≤ 2, пауза вне вьюпорта и в фоновой вкладке. */
+(function () {
+  const canvas = document.getElementById('hero-stream');
+  if (!canvas || !canvas.getContext) return;
+  const ctx = canvas.getContext('2d');
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // то, что провайдер видит в открытом трафике
+  const LINES = [
+    'GET /watch?v=dQw4w9WgXcQ HTTP/1.1',
+    'login: pasha_92  pass: ********',
+    'dns: instagram.com  ip: 157.240.5.63',
+    'msg: созвон в 19:00? скину ссылку',
+    'card: 4276 55** **** 8817',
+    'search: как обойти блокировку youtube',
+  ];
+  const CIPHER = '01#%&@¤§ΞΔΦλΩ∑√≠≋∷⊘⌁◇◆ｱｳｴｶｷｹｺｻｼﾂﾃﾅﾉ';
+
+  let w = 0, h = 0, raf = 0, running = false, inView = false, t = 0, last = 0;
+
+  function resize() {
+    const r = canvas.getBoundingClientRect();
+    w = r.width; h = r.height;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function hash(n) { // детерминированный псевдослучайный [0,1)
+    n |= 0;
+    n = Math.imul(n ^ (n >>> 15), n | 1);
+    n ^= n + Math.imul(n ^ (n >>> 7), n | 61);
+    return ((n ^ (n >>> 14)) >>> 0) / 4294967296;
+  }
+
+  const lerp = (a, b, k) => a + (b - a) * k;
+  const clamp01 = v => Math.max(0, Math.min(1, v));
+  // фирменный градиент #2563eb → #22d3ee
+  const brand = (k, a) =>
+    'rgba(' + Math.round(lerp(37, 34, k)) + ',' + Math.round(lerp(99, 211, k)) + ',' +
+    Math.round(lerp(235, 238, k)) + ',' + a + ')';
+
+  function draw() {
+    ctx.clearRect(0, 0, w, h);
+    const cy = h * 0.52;
+    const ringX = w < 640 ? w * 0.44 : w * 0.5;
+    const ringRy = h * 0.36;
+    const fs = h < 200 ? 11 : 13;
+    const mono = px => px + 'px "JetBrains Mono", monospace';
+
+    // левая часть: строки открытого трафика стягиваются в жерло кольца
+    const nLines = h < 200 ? 4 : 6;
+    ctx.font = mono(fs);
+    const cw = fs * 0.62; // ширина знака JetBrains Mono ≈ 0.6em
+    const funnelStart = ringX - w * 0.18;
+    for (let i = 0; i < nLines; i++) {
+      const line = LINES[i % LINES.length] + '   ';
+      const laneY = h * 0.14 + h * 0.72 * (i / (nLines - 1)) + 2 * Math.sin(t * 0.8 + i * 2.1);
+      const speed = 26 + 9 * hash(i * 131);
+      const shift = (t * speed) % (line.length * cw);
+      for (let j = Math.ceil(-shift / cw) - 1; j * cw + shift < ringX - 14; j++) {
+        const x = j * cw + shift;
+        if (x < -cw) continue;
+        const ch = line[((j % line.length) + line.length) % line.length];
+        if (ch === ' ') continue;
+        const p = clamp01((x - funnelStart) / (ringX - 14 - funnelStart));
+        const e = p * p * (3 - 2 * p); // smoothstep: втягивание в жерло
+        ctx.fillStyle = p > 0 ? brand(0, 0.3 + 0.7 * e) : 'rgba(120,127,140,0.5)';
+        ctx.fillText(ch, x, lerp(laneY, cy, e));
+      }
+    }
+
+    // правая часть: волны шифра разлетаются из кольца и колышутся как море
+    const layers = [
+      { A: 0.30, wl: 200, om: 1.1, alpha: 0.90, dfs: 1,  ph: 0.0 },
+      { A: 0.22, wl: 150, om: 1.5, alpha: 0.55, dfs: 0,  ph: 2.1 },
+      { A: 0.15, wl: 115, om: 2.0, alpha: 0.35, dfs: -1, ph: 4.2 },
+    ];
+    const step = fs + 1;
+    for (let l = 0; l < layers.length; l++) {
+      const L = layers[l];
+      ctx.font = mono(fs + L.dfs);
+      const k = Math.PI * 2 / L.wl;
+      for (let x = ringX + 10; x < w + step; x += step) {
+        const col = Math.round(x / step);
+        const p = clamp01((x - ringX) / (w - ringX));
+        const grow = Math.min(1, (x - ringX) / (w * 0.22));
+        const A = h * L.A * grow * (2 - grow); // ease-out: разлёт из кольца
+        const y = cy + A * Math.sin(k * x - L.om * t + L.ph);
+        const tb = Math.floor(t * 2.6 + hash(col * 13 + l * 97) * 4); // мерцание глифов
+        const ch = CIPHER[Math.floor(hash(col * 131 + l * 977 + tb * 7919) * CIPHER.length)];
+        const burst = l === 0 && grow < 0.5 ? 0.4 * (1 - grow * 2) : 0; // вспышка на выходе
+        ctx.fillStyle = brand(p, Math.min(1, L.alpha * (0.35 + 0.65 * grow) + burst));
+        ctx.fillText(ch, x, y);
+      }
+    }
+
+    // кольцо-тоннель поверх потоков
+    const pulse = 1 + 0.02 * Math.sin(t * 1.8);
+    const grad = ctx.createLinearGradient(0, cy - ringRy, 0, cy + ringRy);
+    grad.addColorStop(0, '#22d3ee'); grad.addColorStop(1, '#2563eb');
+    ctx.save();
+    ctx.shadowColor = 'rgba(34,211,238,0.6)';
+    ctx.shadowBlur = 22;
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.ellipse(ringX, cy, 11, ringRy * pulse, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+    ctx.strokeStyle = 'rgba(94,160,255,0.35)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.ellipse(ringX, cy, 5.5, ringRy * 0.82 * pulse, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  function frame(ts) {
+    if (!running) return;
+    if (last) t += Math.min(ts - last, 50) / 1000;
+    last = ts;
+    draw();
+    raf = requestAnimationFrame(frame);
+  }
+  function start() {
+    if (running || reduceMotion) return;
+    running = true; last = 0;
+    raf = requestAnimationFrame(frame);
+  }
+  function stop() { running = false; cancelAnimationFrame(raf); }
+
+  resize();
+  window.addEventListener('resize', () => { resize(); if (!running) draw(); });
+  if (reduceMotion) {
+    t = 2.4; draw();
+  } else {
+    const io = new IntersectionObserver(es => {
+      inView = es[0].isIntersecting;
+      inView && !document.hidden ? start() : stop();
+    });
+    io.observe(canvas);
+    document.addEventListener('visibilitychange', () => {
+      document.hidden ? stop() : (inView && start());
+    });
+  }
+  // после подгрузки веб-шрифта перерисовать статичный кадр, если анимация не идёт
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (!running) draw(); });
+})();
+</script>
+
+<!-- ═══════════════ "ЧТО ТАКОЕ VPN" — интент: "что делает vpn", "нужен ли vpn", "что значит vpn" ═══════════════ -->
+<section id="what-is-vpn" class="border-b border-line">
+  <div class="max-w-5xl mx-auto px-6 py-16">
+    <div class="grid md:grid-cols-[1fr_1.4fr] gap-10 items-start">
+      <h2 class="text-2xl font-bold tracking-tight">
+        Что делает VPN <span class="text-dim font-normal">и зачем он вам</span>
+      </h2>
+      <div class="text-dim leading-relaxed space-y-4">
+        <p>
+          VPN (Virtual Private Network) шифрует трафик между вашим устройством и сервером
+          и подменяет ваш IP-адрес на адрес сервера. Сайты и сервисы видят не ваше
+          реальное местоположение, а то, где физически стоит VPN-сервер.
+        </p>
+        <p>
+          На практике это решает три задачи: открывает заблокированные в России сайты
+          и сервисы, скрывает от провайдера, что именно вы посещаете, и снимает
+          географические ограничения на стриминг и игровые сервисы.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ "ВСЕГДА ВКЛЮЧЁН / РОССИЯ" — интент: "русский vpn", "впн в россии", "какой vpn работает в россии".
+     id="russia" сохранён с прежней версии секции: на него могут вести внешние ссылки. ═══════════════ -->
+<section id="russia" class="border-b border-line bg-surface/40">
+  <div class="max-w-5xl mx-auto px-6 py-16">
+    <h2 class="text-2xl font-bold tracking-tight mb-3">VPN, который можно держать включённым</h2>
+    <p class="text-dim max-w-2xl mb-10 leading-relaxed">
+      Horizance рассчитан на постоянную работу в фоне. Российские сайты и приложения
+      продолжают открываться как обычно, а YouTube, Telegram, ChatGPT и другие
+      зарубежные сервисы остаются доступны. Без лишних переключений и без
+      «выключите VPN, чтобы продолжить».
+    </p>
+
+    <div class="grid md:grid-cols-3 gap-5">
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <i class="fa-solid fa-shuffle text-primary text-xl mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">Российские сайты открываются</h3>
+        <p class="text-sm text-dim leading-relaxed">Банки, госуслуги и другие российские сервисы идут напрямую, минуя тоннель — включённый VPN им не мешает.</p>
+      </div>
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <i class="fa-solid fa-globe text-primary text-xl mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">Сервера за пределами РФ</h3>
+        <p class="text-sm text-dim leading-relaxed">Точки выхода в Европе — низкий пинг и ровная скорость и на домашнем Wi-Fi, и на мобильном интернете.</p>
+      </div>
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <i class="fa-solid fa-arrows-rotate text-primary text-xl mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">Настройку поддерживаем мы</h3>
+        <p class="text-sm text-dim leading-relaxed">Если что-то меняется в сети, конфигурация обновляется на нашей стороне — переустанавливать приложение не нужно.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ "КАК ЭТО РАБОТАЕТ / ПОДКЛЮЧЕНИЕ" — интент: "как подключить vpn", "как настроить vpn", "vpn инструкция" ═══════════════ -->
+<section id="how" class="border-b border-line">
+  <div class="max-w-5xl mx-auto px-6 py-16">
+    <h2 class="text-2xl font-bold tracking-tight mb-10">Как подключить VPN — 3 шага</h2>
+
+    <ol class="grid md:grid-cols-3 gap-8">
+      <li>
+        <div class="text-primary-light font-mono text-sm mb-3">01 · Бот</div>
+        <h3 class="font-semibold text-ink2 mb-2">Откройте Telegram-бота</h3>
+        <p class="text-sm text-dim leading-relaxed">Бот выдаёт личный VLESS-конфиг и QR-код для быстрого импорта в приложение Happ.</p>
+      </li>
+      <li>
+        <div class="text-primary-light font-mono text-sm mb-3">02 · Приложение</div>
+        <h3 class="font-semibold text-ink2 mb-2">Установите Happ</h3>
+        <p class="text-sm text-dim leading-relaxed">Один клиент для Android, iOS, Windows, macOS и Linux — поддерживает VLESS Reality из коробки.</p>
+      </li>
+      <li>
+        <div class="text-primary-light font-mono text-sm mb-3">03 · Подключение</div>
+        <h3 class="font-semibold text-ink2 mb-2">Импортируйте конфиг</h3>
+        <p class="text-sm text-dim leading-relaxed">Отсканируйте QR или вставьте ссылку — соединение устанавливается автоматически.</p>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<!-- ═══════════════ ПЛАТФОРМЫ — интент: "vpn для андроид/айфон/пк/windows", "vpn расширение", "vpn для тг" ═══════════════ -->
+<section id="platforms" class="border-b border-line bg-surface/40">
+  <div class="max-w-5xl mx-auto px-6 py-16">
+    <h2 class="text-2xl font-bold tracking-tight mb-3">VPN для всех ваших устройств</h2>
+    <p class="text-dim max-w-2xl mb-10 leading-relaxed">
+      Одна подписка — до 3 устройств: телефон, компьютер, телевизор. Адрес
+      подписки одинаковый, меняется только приложение — Happ или
+      <a href="/incy" class="text-primary-light underline">INCY</a>.
+    </p>
+
+    <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-4">
+      <a href="/go/app/Android?src=home"
+         class="bg-surface border border-line rounded-2xl p-5 text-center transition-all duration-150 hover:border-faint hover:bg-surface2">
+        <i class="fa-brands fa-android text-2xl text-emerald-400 mb-2" aria-hidden="true"></i>
+        <div class="text-sm font-semibold text-ink2">VPN для Android</div>
+      </a>
+      <a href="/go/app/iOS?src=home"
+         class="bg-surface border border-line rounded-2xl p-5 text-center transition-all duration-150 hover:border-faint hover:bg-surface2">
+        <i class="fa-brands fa-apple text-2xl text-ink2 mb-2" aria-hidden="true"></i>
+        <div class="text-sm font-semibold text-ink2">VPN для iPhone</div>
+      </a>
+      <a href="/go/app/Windows?src=home"
+         class="bg-surface border border-line rounded-2xl p-5 text-center transition-all duration-150 hover:border-faint hover:bg-surface2">
+        <i class="fa-brands fa-windows text-2xl text-primary-light mb-2" aria-hidden="true"></i>
+        <div class="text-sm font-semibold text-ink2">VPN для Windows</div>
+      </a>
+      <a href="/go/app/macOS?src=home"
+         class="bg-surface border border-line rounded-2xl p-5 text-center transition-all duration-150 hover:border-faint hover:bg-surface2">
+        <i class="fa-brands fa-apple text-2xl text-ink2 mb-2" aria-hidden="true"></i>
+        <div class="text-sm font-semibold text-ink2">VPN для Mac</div>
+      </a>
+      <a href="/go/app/Linux?src=home"
+         class="bg-surface border border-line rounded-2xl p-5 text-center transition-all duration-150 hover:border-faint hover:bg-surface2">
+        <i class="fa-brands fa-linux text-2xl text-ink2 mb-2" aria-hidden="true"></i>
+        <div class="text-sm font-semibold text-ink2">VPN для Linux</div>
+      </a>
+      <a href="/tv"
+         class="bg-surface border border-line rounded-2xl p-5 text-center transition-all duration-150 hover:border-faint hover:bg-surface2">
+        <i class="fa-solid fa-tv text-2xl text-primary-light mb-2" aria-hidden="true"></i>
+        <div class="text-sm font-semibold text-ink2">VPN для телевизора</div>
+      </a>
+      <div class="bg-surface border border-line rounded-2xl p-5 text-center relative">
+        <span class="absolute top-2 right-2 text-[10px] font-mono text-faint border border-line2 rounded-full px-2 py-0.5">скоро</span>
+        <i class="fa-brands fa-chrome text-2xl text-primary mb-2" aria-hidden="true"></i>
+        <div class="text-sm font-semibold text-ink2">Расширение для браузера</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ ПРЕИМУЩЕСТВА — интент: "хороший впн", "какой vpn лучше", "лучший vpn" ═══════════════ -->
+<section id="why" class="border-b border-line">
+  <div class="max-w-5xl mx-auto px-6 py-16">
+    <h2 class="text-2xl font-bold tracking-tight mb-3">Чем Horizance отличается от обычного VPN</h2>
+    <p class="text-dim max-w-2xl mb-10 leading-relaxed">
+      Не маркетинговые обещания, а конкретные технические решения.
+    </p>
+
+    <div class="grid md:grid-cols-3 gap-5">
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <i class="fa-solid fa-user-secret text-primary text-xl mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">Устойчив к блокировкам РКН и ТСПУ</h3>
+        <p class="text-sm text-dim leading-relaxed">Трафик маскируется под обычное HTTPS-соединение — для систем DPI это «белый шум». Протоколы VLESS Reality и собственные наработки.</p>
+      </div>
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <i class="fa-solid fa-globe text-primary text-xl mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">Один ключ — все сервера</h3>
+        <p class="text-sm text-dim leading-relaxed">Ссылка-подписка сама подключает все доступные сервера. Точки выхода в нескольких странах — переключайтесь между ними в любой момент.</p>
+      </div>
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <i class="fa-solid fa-gauge-high text-primary text-xl mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">Без ограничений трафика и скорости</h3>
+        <p class="text-sm text-dim leading-relaxed">Никакого throttling — расходуйте сколько нужно на максимальной скорости соединения.</p>
+      </div>
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <i class="fa-solid fa-shuffle text-primary text-xl mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">Раздельное туннелирование</h3>
+        <p class="text-sm text-dim leading-relaxed">Сервис сам распознаёт российские сайты и сервисы и пускает их напрямую, в обход VPN — зарубежный трафик идёт через тоннель. Настраивать вручную ничего не нужно.</p>
+      </div>
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <i class="fa-solid fa-lock text-primary text-xl mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">Не храним логи</h3>
+        <p class="text-sm text-dim leading-relaxed">Не ведём и не сохраняем историю вашей активности — какие сайты вы посещали и что скачивали.</p>
+      </div>
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <i class="fa-solid fa-ban text-primary text-xl mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">Блокировка рекламы и трекеров</h3>
+        <p class="text-sm text-dim leading-relaxed">Встроенная фильтрация баннеров и трекеров на уровне VPN — без отдельных расширений в браузере.</p>
+      </div>
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <i class="fa-solid fa-credit-card text-primary text-xl mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">99 ₽ в месяц</h3>
+        <p class="text-sm text-dim leading-relaxed">Или 999 ₽ за год. Оплата по СБП или криптовалютой, без скрытых платежей.</p>
+      </div>
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <i class="fa-solid fa-mobile-screen text-primary text-xl mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">До 3 устройств</h3>
+        <p class="text-sm text-dim leading-relaxed">Телефон, компьютер и <a href="/tv" class="underline hover:text-ink">телевизор</a> — на одной подписке. Android, iPhone, Windows, macOS, Linux, Android TV и Apple TV.</p>
+      </div>
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <i class="fa-solid fa-user-plus text-primary text-xl mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">Месяц бесплатно за друга</h3>
+        <p class="text-sm text-dim leading-relaxed">Пригласите друга по ссылке из бота — когда он оформит подписку, вам добавится 30 дней.</p>
+      </div>
+      <div class="bg-surface border border-line rounded-2xl p-6 md:col-span-3">
+        <i class="fa-solid fa-gift text-primary text-xl mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">Бесплатный доступ</h3>
+        <p class="text-sm text-dim leading-relaxed">24 часа бесплатно без регистрации — попробовать прямо сейчас. Либо 14 дней бесплатно при подключении через Telegram-бота.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ ЧЕМ ПЛОХИ БЕСПЛАТНЫЕ VPN — интент: "бесплатный vpn", "опасно ли бесплатный vpn", "какой vpn лучше" ═══════════════ -->
+<section id="free-vpn-risks" class="border-b border-line bg-surface/40">
+  <div class="max-w-5xl mx-auto px-6 py-16">
+    <h2 class="text-2xl font-bold tracking-tight mb-3">Чем опасны бесплатные VPN</h2>
+    <p class="text-dim max-w-2xl mb-10 leading-relaxed">
+      Сервер, трафик и поддержка стоят денег. Если приложение ничего не берёт с вас
+      напрямую, оно зарабатывает как-то иначе. Независимые исследования бесплатных
+      VPN-приложений год за годом приходят к одним и тем же выводам.
+    </p>
+
+    <div class="grid md:grid-cols-2 gap-5">
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <i class="fa-solid fa-database text-primary text-xl mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">Продажа данных рекламодателям</h3>
+        <p class="text-sm text-dim leading-relaxed">В нескольких независимых аудитах бесплатных Android VPN большинство приложений передавало данные о трафике сторонним рекламным сетям и брокерам данных — VPN сам становится источником слежки, от которой должен защищать.</p>
+      </div>
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <i class="fa-solid fa-triangle-exclamation text-primary text-xl mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">Утечки реального IP и DNS</h3>
+        <p class="text-sm text-dim leading-relaxed">У большинства проверенных бесплатных приложений находили утечки через WebRTC, DNS или IPv6 — VPN включён, а настоящий адрес и местоположение всё равно видны сайтам.</p>
+      </div>
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <i class="fa-solid fa-bug text-primary text-xl mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">Трекеры и вредоносный код</h3>
+        <p class="text-sm text-dim leading-relaxed">Антивирусные проверки неоднократно находили встроенные трекеры, агрессивные рекламные SDK, а в части приложений — прямо вредоносный код.</p>
+      </div>
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <i class="fa-solid fa-building-shield text-primary text-xl mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">Непрозрачное владение</h3>
+        <p class="text-sm text-dim leading-relaxed">У значительной части бесплатных VPN сложно установить реального владельца и юрисдикцию — а значит, непонятно, кому по закону могут передать логи вашей активности.</p>
+      </div>
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <i class="fa-solid fa-gauge text-primary text-xl mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">Ограничения и первым отключается</h3>
+        <p class="text-sm text-dim leading-relaxed">Урезанная скорость, лимит трафика и постоянные обрывы — а как только протокол попадает под свежую блокировку, обновлять его для бесплатных пользователей чаще всего никто не спешит.</p>
+      </div>
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <i class="fa-solid fa-user-secret text-primary text-xl mb-3" aria-hidden="true"></i>
+        <h3 class="font-semibold text-ink2 mb-2">Нет ответственности за приватность</h3>
+        <p class="text-sm text-dim leading-relaxed">Без платящих клиентов у сервиса нет коммерческого стимула держать обещание «без логов» — проверить это со стороны почти невозможно, и репутационные риски для авторов минимальны.</p>
+      </div>
+    </div>
+
+    <p class="text-xs text-faint mt-6">
+      По данным независимых исследований рынка бесплатных мобильных VPN-приложений (в т.ч. Top10VPN, антивирусных лабораторий).
+    </p>
+  </div>
+</section>
+
+<!-- ═══════════════ ТАРИФЫ — интент: "vpn подписка", "платный vpn", "купить впн", "vpn personal" ═══════════════ -->
+<section id="pricing" class="border-b border-line bg-surface/40">
+  <div class="max-w-5xl mx-auto px-6 py-16">
+    <h2 class="text-2xl font-bold tracking-tight mb-3">Подписка на VPN</h2>
+    <p class="text-dim max-w-2xl mb-10 leading-relaxed">
+      Без скрытых платежей и автопродления без предупреждения. Оплата по СБП
+      или криптовалютой — через Telegram-бота.
+    </p>
+
+    <div class="grid md:grid-cols-3 gap-5">
+
+      <div class="bg-surface border border-line rounded-2xl p-7">
+        <div class="text-sm font-semibold text-dim mb-1">Тест</div>
+        <div class="text-3xl font-extrabold mb-4">0&nbsp;₽<span class="text-sm text-faint font-normal"> / 24 часа</span></div>
+        <ul class="text-sm text-dim space-y-2 mb-6">
+          <li>1 устройство</li>
+          <li>Без ограничения скорости</li>
+          <li>Без банковской карты</li>
+        </ul>
+        <a href="/trial" class="block text-center border border-line2 hover:border-faint hover:bg-surface2 text-ink2 font-semibold rounded-xl py-3 transition-colors">Попробовать</a>
+      </div>
+
+      <div class="bg-surface border-2 border-primary rounded-2xl p-7 relative">
+        <span class="absolute -top-3 left-7 bg-primary text-white text-xs font-semibold px-3 py-1 rounded-full">Популярный</span>
+        <div class="text-sm font-semibold text-dim mb-1">Месяц</div>
+        <div class="text-3xl font-extrabold mb-4">{{ settings.default_price }}&nbsp;₽<span class="text-sm text-faint font-normal"> / мес</span></div>
+        <ul class="text-sm text-dim space-y-2 mb-6">
+          <li>До 3 устройств</li>
+          <li>Все сервера и протоколы</li>
+          <li>Приоритетная поддержка</li>
+        </ul>
+        <a href="/auth" class="block text-center bg-primary hover:bg-primary-light text-white font-semibold rounded-xl py-3 transition-colors">Подключить</a>
+      </div>
+
+      <div class="bg-surface border border-line rounded-2xl p-7">
+        <div class="text-sm font-semibold text-dim mb-1">Год</div>
+        <div class="text-3xl font-extrabold mb-4">{{ settings.yearly_price }}&nbsp;₽<span class="text-sm text-faint font-normal"> / год</span></div>
+        <ul class="text-sm text-dim space-y-2 mb-6">
+          <li>До 3 устройств</li>
+          <li>Все сервера и протоколы</li>
+          <li>Экономия ~16% от месячной цены</li>
+        </ul>
+        <a href="/auth" class="block text-center border border-line2 hover:border-faint hover:bg-surface2 text-ink2 font-semibold rounded-xl py-3 transition-colors">Подключить</a>
+      </div>
+    </div>
+    <p class="text-xs text-faint mt-6">Цены приведены в качестве примера — актуальные тарифы уточняйте в Telegram-боте.</p>
+  </div>
+</section>
+
+<!-- ═══════════════ FAQ — интент: "почему впн", "впн ли", "впн не работает" + FAQPage schema ═══════════════ -->
+<section id="faq" class="bg-surface/40">
+  <div class="max-w-3xl mx-auto px-6 py-16">
+    <h2 class="text-2xl font-bold tracking-tight mb-8 text-center">Частые вопросы</h2>
+
+    <div class="space-y-2">
+
+      <details class="bg-surface border border-line2 rounded-xl group">
+        <summary class="flex items-center justify-between px-5 py-4 cursor-pointer select-none text-ink2 text-sm font-medium hover:text-white transition-colors">
+          <span>Почему VPN — это законно?</span>
+          <i class="fa-solid fa-chevron-down text-mute text-xs ml-3 flex-shrink-0 group-open:rotate-180 transition-transform" aria-hidden="true"></i>
+        </summary>
+        <div class="px-5 pb-4 pt-1 text-dim text-sm leading-relaxed border-t border-line">
+          Использование VPN в России не запрещено. Ограничения касаются распространения
+          информации о способах обхода блокировок отдельных ресурсов — сам факт
+          использования VPN для личных нужд под эти ограничения не подпадает.
+        </div>
+      </details>
+
+      <details class="bg-surface border border-line2 rounded-xl group">
+        <summary class="flex items-center justify-between px-5 py-4 cursor-pointer select-none text-ink2 text-sm font-medium hover:text-white transition-colors">
+          <span>Почему обычный VPN не работает, а Reality — работает?</span>
+          <i class="fa-solid fa-chevron-down text-mute text-xs ml-3 flex-shrink-0 group-open:rotate-180 transition-transform" aria-hidden="true"></i>
+        </summary>
+        <div class="px-5 pb-4 pt-1 text-dim text-sm leading-relaxed border-t border-line">
+          DPI-системы блокируют VPN не по IP-адресу, а по характерному «отпечатку»
+          протокола. OpenVPN и обычный WireGuard такой отпечаток оставляют.
+          Reality имитирует настоящее TLS-соединение с реальным сайтом —
+          отличить его от обычного HTTPS-трафика практически невозможно.
+        </div>
+      </details>
+
+      <details class="bg-surface border border-line2 rounded-xl group">
+        <summary class="flex items-center justify-between px-5 py-4 cursor-pointer select-none text-ink2 text-sm font-medium hover:text-white transition-colors">
+          <span>Почему VPN не работает и как это исправить?</span>
+          <i class="fa-solid fa-chevron-down text-mute text-xs ml-3 flex-shrink-0 group-open:rotate-180 transition-transform" aria-hidden="true"></i>
+        </summary>
+        <div class="px-5 pb-4 pt-1 text-dim text-sm leading-relaxed border-t border-line">
+          «Не работает» почти всегда сводится к одной из трёх причин. Первая и самая частая —
+          конкретный сервер попал под свежую блокировку: переключитесь на другой прямо в Happ,
+          ссылка-подписка подтягивает их все разом. Вторая — сбилось системное время на устройстве:
+          Reality проверяет точность TLS-рукопожатия, и рассинхронизация даже на пару минут рвёт
+          соединение — проверьте автоматическую синхронизацию времени в настройках телефона. Третья —
+          устаревшая версия Happ. Если ни один вариант не помог, напишите в поддержку через бота:
+          обычно это решается в течение часа.
+        </div>
+      </details>
+
+      <details class="bg-surface border border-line2 rounded-xl group">
+        <summary class="flex items-center justify-between px-5 py-4 cursor-pointer select-none text-ink2 text-sm font-medium hover:text-white transition-colors">
+          <span>Какой VPN выбрать, чтобы он точно работал в России?</span>
+          <i class="fa-solid fa-chevron-down text-mute text-xs ml-3 flex-shrink-0 group-open:rotate-180 transition-transform" aria-hidden="true"></i>
+        </summary>
+        <div class="px-5 pb-4 pt-1 text-dim text-sm leading-relaxed border-t border-line">
+          Главный критерий — протокол, а не бренд. Сервисы на OpenVPN и обычном WireGuard
+          в России чаще всего перестают работать через несколько недель. Ищите VPN на
+          VLESS Reality или похожей маскировке под HTTPS, с несколькими серверами на выбор
+          (если один перестал отвечать, переключаетесь на другой) и без ограничений
+          скорости — это и есть рабочая комбинация на сегодняшний день.
+        </div>
+      </details>
+
+      <details class="bg-surface border border-line2 rounded-xl group">
+        <summary class="flex items-center justify-between px-5 py-4 cursor-pointer select-none text-ink2 text-sm font-medium hover:text-white transition-colors">
+          <span>Чем Horizance отличается от Amnezia, Happ и других VPN-приложений?</span>
+          <i class="fa-solid fa-chevron-down text-mute text-xs ml-3 flex-shrink-0 group-open:rotate-180 transition-transform" aria-hidden="true"></i>
+        </summary>
+        <div class="px-5 pb-4 pt-1 text-dim text-sm leading-relaxed border-t border-line">
+          Happ — это клиентское приложение, а не сервис: оно умеет подключаться по протоколу
+          VLESS Reality, но сервер и конфигурацию нужно получить откуда-то ещё. Horizance —
+          именно сервис: мы предоставляем сами сервера, ссылку-подписку, которая сразу
+          подключает все точки выхода, и техподдержку — а Happ используем как готовый,
+          проверенный клиент для подключения.
+        </div>
+      </details>
+
+      <details class="bg-surface border border-line2 rounded-xl group">
+        <summary class="flex items-center justify-between px-5 py-4 cursor-pointer select-none text-ink2 text-sm font-medium hover:text-white transition-colors">
+          <span>Правда ли, что бесплатные VPN опасны?</span>
+          <i class="fa-solid fa-chevron-down text-mute text-xs ml-3 flex-shrink-0 group-open:rotate-180 transition-transform" aria-hidden="true"></i>
+        </summary>
+        <div class="px-5 pb-4 pt-1 text-dim text-sm leading-relaxed border-t border-line">
+          В большинстве случаев да. Сервер и трафик стоят денег, и если приложение бесплатное,
+          оно чаще всего зарабатывает на данных пользователя: продаёт статистику посещений
+          рекламным сетям и брокерам данных, показывает встроенную рекламу или содержит трекеры.
+          В независимых аудитах бесплатных Android VPN также регулярно находили утечки реального
+          IP через WebRTC/DNS и случаи вредоносного кода. Наш тест на 24 часа — тот же продукт
+          Horizance без урезанных функций, а не отдельное бесплатное приложение с другой моделью
+          монетизации.
+        </div>
+      </details>
+
+      <details class="bg-surface border border-line2 rounded-xl group">
+        <summary class="flex items-center justify-between px-5 py-4 cursor-pointer select-none text-ink2 text-sm font-medium hover:text-white transition-colors">
+          <span>Как оплатить подписку и на сколько устройств она рассчитана?</span>
+          <i class="fa-solid fa-chevron-down text-mute text-xs ml-3 flex-shrink-0 group-open:rotate-180 transition-transform" aria-hidden="true"></i>
+        </summary>
+        <div class="px-5 pb-4 pt-1 text-dim text-sm leading-relaxed border-t border-line">
+          Оплата — по СБП или криптовалютой прямо через Telegram-бота, без отдельного сайта
+          для платежей. Тариф «Месяц» и «Год» рассчитаны на до 3 устройств одновременно —
+          конфигурация одна и та же, меняется только устройство, на котором она используется.
+        </div>
+      </details>
+
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ FOOTER CTA ═══════════════ -->
+<section class="border-t border-line">
+  <div class="max-w-3xl mx-auto px-6 py-16 text-center">
+    <h2 class="text-2xl font-bold tracking-tight mb-4">Проверьте, как это работает у вас</h2>
+    <p class="text-dim mb-8">24 часа бесплатно. Без карты, без обязательств.</p>
+    <a href="/trial" class="inline-block bg-primary hover:bg-primary-light text-white font-semibold rounded-xl px-8 py-4 transition-colors">
+      Получить бесплатный доступ
+    </a>
+  </div>
+</section>
+
+<!-- ═══════════════ JSON-LD: FAQPage + Organization (для Яндекса и Google) ═══════════════ -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Почему VPN — это законно?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Использование VPN в России не запрещено. Ограничения касаются распространения информации о способах обхода блокировок отдельных ресурсов, а не личного использования VPN."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Почему обычный VPN не работает, а Reality — работает?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "DPI блокирует VPN по отпечатку протокола. Reality имитирует настоящее TLS-соединение с реальным сайтом, поэтому его сложно отличить от обычного HTTPS-трафика."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Почему VPN не работает и как это исправить?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Чаще всего причина одна из трёх: сервер попал под свежую блокировку (переключитесь на другой — ссылка-подписка подтягивает их все сразу), сбилось системное время на устройстве (Reality проверяет точность TLS-рукопожатия), либо устарела версия приложения Happ. Если не помогло — напишите в поддержку через бота."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Какой VPN выбрать, чтобы он точно работал в России?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Главный критерий — протокол, а не бренд. Ищите VPN на VLESS Reality или похожей маскировке под HTTPS, с несколькими серверами на выбор и без ограничений скорости — сервисы на OpenVPN и обычном WireGuard в России чаще всего перестают работать через несколько недель."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Чем Horizance отличается от Amnezia, Happ и других VPN-приложений?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Happ — клиентское приложение, а не сервис: сервер и конфигурацию нужно получить откуда-то ещё. Horizance — сервис: мы предоставляем сервера, ссылку-подписку и техподдержку, а Happ используем как готовый клиент для подключения."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Правда ли, что бесплатные VPN опасны?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "В большинстве случаев да. Бесплатное приложение чаще всего зарабатывает на данных пользователя: продаёт статистику посещений рекламным сетям и брокерам данных, показывает встроенную рекламу или содержит трекеры. Независимые аудиты бесплатных Android VPN также регулярно находили утечки реального IP через WebRTC/DNS и случаи вредоносного кода."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Как оплатить подписку и на сколько устройств она рассчитана?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Оплата по СБП или криптовалютой прямо через Telegram-бота. Тарифы «Месяц» и «Год» рассчитаны на до 3 устройств одновременно."
+      }
+    }
+  ]
+}
+</script>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "name": "Horizance",
+  "url": "https://horizancevpn.com/",
+  "logo": "https://horizancevpn.com/static/img/logo.png",
+  "sameAs": ["https://t.me/Horizance_vpn_bot"]
+}
+</script>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Service",
+  "serviceType": "VPN",
+  "name": "Horizance VPN",
+  "description": "Личный VPN на протоколе VLESS Reality — обходит блокировки и DPI, без ограничений скорости и трафика.",
+  "provider": {
+    "@type": "Organization",
+    "name": "Horizance"
+  },
+  "areaServed": "RU",
+  "offers": [
+    {
+      "@type": "Offer",
+      "name": "Тест",
+      "price": "0",
+      "priceCurrency": "RUB",
+      "url": "https://horizancevpn.com/trial",
+      "eligibleDuration": { "@type": "QuantitativeValue", "value": "24", "unitCode": "HUR" }
+    },
+    {
+      "@type": "Offer",
+      "name": "Месяц",
+      "price": "{{ settings.default_price }}",
+      "priceCurrency": "RUB",
+      "url": "https://horizancevpn.com/#pricing",
+      "eligibleDuration": { "@type": "QuantitativeValue", "value": "1", "unitCode": "MON" }
+    },
+    {
+      "@type": "Offer",
+      "name": "Год",
+      "price": "{{ settings.yearly_price }}",
+      "priceCurrency": "RUB",
+      "url": "https://horizancevpn.com/#pricing",
+      "eligibleDuration": { "@type": "QuantitativeValue", "value": "1", "unitCode": "ANN" }
+    }
+  ]
+}
+</script>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Product",
+  "name": "Подписка Horizance VPN",
+  "description": "Личный VPN на протоколе VLESS Reality — обходит блокировки и DPI, до 3 устройств, без ограничений скорости и трафика.",
+  "image": "https://horizancevpn.com/static/img/logo.png",
+  "brand": { "@type": "Brand", "name": "Horizance" },
+  "url": "https://horizancevpn.com/#pricing",
+  "offers": {
+    "@type": "AggregateOffer",
+    "lowPrice": "{{ settings.default_price }}",
+    "highPrice": "{{ settings.yearly_price }}",
+    "priceCurrency": "RUB",
+    "offerCount": "2",
+    "url": "https://horizancevpn.com/#pricing",
+    "availability": "https://schema.org/InStock"
+  }
+}
+</script>
+
+{% endblock %}

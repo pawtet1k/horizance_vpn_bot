@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+
+{% block title %}{{ article.meta_title }}{% endblock %}
+{% block meta_description %}{{ article.meta_description }}{% endblock %}
+{% block meta_keywords %}{{ article.meta_keywords }}{% endblock %}
+{% block canonical %}https://horizancevpn.com/blog/{{ article.slug }}{% endblock %}
+{% block og_title %}{{ article.title }}{% endblock %}
+{% block og_description %}{{ article.excerpt }}{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* ═══ Журнальная типографика статьи ═══ */
+  .article-body { font-size: 1.02rem; }
+
+  /* лид-абзац крупнее + буквица */
+  .article-body > p:first-of-type {
+    font-size: 1.22rem;
+    line-height: 1.75;
+    color: #b9b9b9;
+  }
+  .article-body > p:first-of-type::first-letter {
+    float: left;
+    font-size: 3.6em;
+    line-height: 0.85;
+    font-weight: 800;
+    padding: 0.04em 0.12em 0 0;
+    color: transparent;
+    background: linear-gradient(135deg, #5ea0ff, #1246b8);
+    -webkit-background-clip: text;
+    background-clip: text;
+  }
+
+  /* заголовки разделов: градиентная планка-надчерк, как «луч» логотипа */
+  .article-body h2 {
+    position: relative;
+    padding-top: 1.1rem;
+  }
+  .article-body h2::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0;
+    width: 2.6rem; height: 4px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #5ea0ff, #22d3ee);
+  }
+
+  .article-body a { text-underline-offset: 3px; }
+  .article-body ul li::marker, .article-body ol li::marker { color: #5ea0ff; font-weight: 700; }
+
+  /* ═══ Стилизованные таблицы (перекрывают инлайн-классы контента) ═══ */
+  .article-body .overflow-x-auto {
+    border: 1px solid #242424;
+    border-radius: 16px;
+    background: #101014;
+  }
+  .article-body table { border-collapse: separate; border-spacing: 0; min-width: 100%; }
+  .article-body table th {
+    background: #17181d;
+    color: #8fb8ff;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    padding: 0.85rem 1.1rem;
+    border-bottom: 1px solid #2c2c2c;
+    white-space: nowrap;
+  }
+  .article-body table td {
+    padding: 0.85rem 1.1rem;
+    border-bottom: 1px solid #1d1d22;
+    vertical-align: top;
+    line-height: 1.55;
+  }
+  .article-body table tbody tr:last-child td { border-bottom: none; }
+  .article-body table tbody tr:nth-child(even) { background: #131318; }
+  .article-body table tbody tr:hover { background: #16202f; }
+  .article-body table tbody tr td:first-child { color: #e8e8e8; font-weight: 600; }
+
+  /* прогресс чтения — тонкая линия под шапкой */
+  #reading-progress {
+    position: fixed;
+    top: 0; left: 0;
+    height: 2px;
+    width: 0;
+    background: linear-gradient(90deg, #5ea0ff, #22d3ee);
+    z-index: 60;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #reading-progress { display: none; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="reading-progress" aria-hidden="true"></div>
+
+<article class="max-w-3xl mx-auto px-6 py-14">
+
+  <!-- ═══ Шапка статьи: хлебная крошка + журнальный заголовок + мета ═══ -->
+  <header class="mb-10">
+    <nav class="text-sm mb-6" aria-label="Хлебные крошки">
+      <a href="/blog" class="text-dim hover:text-ink transition-colors">&larr; Блог</a>
+    </nav>
+
+    <h1 class="text-3xl md:text-[2.75rem] font-extrabold tracking-tight leading-[1.12] mb-5">{{ article.title }}</h1>
+
+    <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-faint font-mono">
+      <time datetime="{{ article.published_iso }}">{{ article.published }}</time>
+      <span aria-hidden="true">·</span>
+      <span>{{ reading_time }} мин чтения</span>
+      <span aria-hidden="true">·</span>
+      <span class="text-dim">Horizance</span>
+    </div>
+  </header>
+
+  {% if article.image %}
+  <figure class="mb-12 -mx-1">
+    <img src="{{ static_v(article.image) }}" alt="{{ article.title }}"
+         width="1280" height="720" fetchpriority="high" loading="eager" decoding="async"
+         class="w-full aspect-video object-cover rounded-2xl border border-line"/>
+  </figure>
+  {% endif %}
+
+  <!-- ═══ Короткое предложение в начале: из Яндекса в блог приходят ~100 человек
+       за 20 дней, а триал берут 8% — до нижнего блока почти никто не доходит ═══ -->
+  <aside class="mb-10 bg-surface border border-line rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+    <p class="text-sm text-dim leading-relaxed flex-1">
+      <span class="text-ink2 font-semibold">Нужен VPN, который работает?</span>
+      Попробуйте Horizance: 24 часа бесплатно, без регистрации и без карты.
+    </p>
+    <a href="/trial?src=blog_top" class="shrink-0 text-center bg-primary hover:bg-primary-light text-white text-sm font-semibold rounded-xl px-5 py-3 transition-colors">
+      Попробовать бесплатно
+    </a>
+  </aside>
+
+  <!-- ═══ Тело статьи ═══ -->
+  <div class="article-body text-dim leading-relaxed space-y-6">
+    {{ article.content_html | safe }}
+  </div>
+
+  <!-- ═══ CTA-вставка с мотивом логотипа (восход над горизонтом) ═══ -->
+  <div class="relative overflow-hidden mt-16 bg-surface border border-line rounded-2xl p-8 sm:p-10 text-center">
+    <!-- световой «горизонт» — фирменный росчерк без копирования логотипа -->
+    <svg class="absolute inset-x-0 bottom-0 w-full h-24" viewBox="0 0 720 96"
+         preserveAspectRatio="xMidYMax slice" aria-hidden="true" fill="none">
+      <defs>
+        <linearGradient id="cta-streak" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#5ea0ff" stop-opacity="0"/>
+          <stop offset="0.25" stop-color="#5ea0ff" stop-opacity="0.85"/>
+          <stop offset="0.62" stop-color="#22d3ee" stop-opacity="0.85"/>
+          <stop offset="1" stop-color="#22d3ee" stop-opacity="0"/>
+        </linearGradient>
+        <radialGradient id="cta-glow" cx="0.5" cy="1" r="1">
+          <stop stop-color="#5ea0ff" stop-opacity="0.28"/>
+          <stop offset="1" stop-color="#5ea0ff" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+      <rect x="0" y="20" width="720" height="76" fill="url(#cta-glow)"/>
+      <path d="M60 64 H660" stroke="url(#cta-streak)" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="M180 82 H540" stroke="url(#cta-streak)" stroke-width="1.5" opacity="0.5" stroke-linecap="round"/>
+    </svg>
+    <div class="relative">
+      <h2 class="text-xl sm:text-2xl font-bold tracking-tight mb-3">{{ article.cta_title or "Проверьте, как это работает у вас" }}</h2>
+      <p class="text-dim mb-7 max-w-xl mx-auto">{{ article.cta_text or "24 часа бесплатно. Без карты, без обязательств." }}</p>
+      <a href="/trial?src=blog_bottom" class="inline-block bg-primary hover:bg-primary-light text-white font-semibold rounded-xl px-8 py-4 transition-colors">
+        {{ article.cta_button or "Получить бесплатный доступ" }}
+      </a>
+      <p class="text-xs text-faint mt-4 mb-6">Без банковской карты · Отмена в любой момент</p>
+    </div>
+  </div>
+
+  <!-- ═══ FAQ по статье ═══ -->
+  {% if article.faq %}
+  <section class="mt-16" aria-labelledby="article-faq-title">
+    <h2 id="article-faq-title" class="text-2xl font-bold tracking-tight mb-6">Частые вопросы</h2>
+    <div class="space-y-2">
+      {% for item in article.faq %}
+      <details class="bg-surface border border-line2 rounded-xl group">
+        <summary class="flex items-center justify-between px-5 py-4 cursor-pointer select-none text-ink2 text-sm font-medium hover:text-white transition-colors">
+          <span>{{ item.q }}</span>
+          <i class="fa-solid fa-chevron-down text-mute text-xs ml-3 flex-shrink-0 group-open:rotate-180 transition-transform" aria-hidden="true"></i>
+        </summary>
+        <div class="px-5 pb-4 pt-1 text-dim text-sm leading-relaxed border-t border-line">
+          {{ item.a }}
+        </div>
+      </details>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+</article>
+
+<!-- ═══ Читать также ═══ -->
+{% if related %}
+<section class="border-t border-line bg-surface/40" aria-labelledby="related-title">
+  <div class="max-w-5xl mx-auto px-6 py-14">
+    <h2 id="related-title" class="text-2xl font-bold tracking-tight mb-8">Читать также</h2>
+    <div class="grid sm:grid-cols-2 md:grid-cols-3 gap-5">
+      {% for item in related %}
+      <a href="/blog/{{ item.slug }}"
+         class="group block bg-surface border border-line rounded-2xl overflow-hidden hover:border-line2 transition-colors">
+        {% if item.image %}
+        <img src="{{ static_v(item.image) }}" alt="{{ item.title }}" loading="lazy"
+             class="w-full aspect-video object-cover border-b border-line group-hover:opacity-90 transition-opacity"/>
+        {% endif %}
+        <div class="p-5">
+          <h3 class="font-semibold text-ink2 leading-snug mb-2 group-hover:text-white transition-colors">{{ item.title }}</h3>
+          <p class="text-xs text-faint font-mono">{{ item.published }}</p>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": {{ article.title | tojson }},
+  "description": {{ article.meta_description | tojson }},
+  "author": {"@type": "Organization", "name": "Horizance"},
+  "publisher": {
+    "@type": "Organization",
+    "name": "Horizance",
+    "logo": {"@type": "ImageObject", "url": "https://horizancevpn.com/static/img/logo.png"}
+  },
+  "datePublished": {{ article.published_iso | tojson }},
+  "dateModified": {{ article.published_iso | tojson }},{% if article.image %}
+  "image": "https://horizancevpn.com{{ article.image }}",{% endif %}
+  "mainEntityOfPage": "https://horizancevpn.com/blog/{{ article.slug }}"
+}
+</script>
+
+{% if article.faq %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {% for item in article.faq %}
+    {
+      "@type": "Question",
+      "name": {{ item.q | tojson }},
+      "acceptedAnswer": {"@type": "Answer", "text": {{ item.a | tojson }}}
+    }{{ "," if not loop.last }}
+    {% endfor %}
+  ]
+}
+</script>
+{% endif %}
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  // прогресс чтения статьи
+  (function () {
+    var bar = document.getElementById('reading-progress');
+    if (!bar) return;
+    function update() {
+      var doc = document.documentElement;
+      var max = doc.scrollHeight - window.innerHeight;
+      bar.style.width = (max > 0 ? (window.scrollY / max) * 100 : 0) + '%';
+    }
+    window.addEventListener('scroll', update, { passive: true });
+    update();
+  })();
+</script>
+{% endblock %}

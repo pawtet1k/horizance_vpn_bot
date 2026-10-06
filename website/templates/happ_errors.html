@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+
+{# ═══════════════════════════════════════════════════════════════
+   HAPP_ERRORS.HTML — справочник ошибок приложения Happ (/happ/oshibki).
+   Читатель уже пользуется продуктом и пришёл с конкретным сообщением
+   об ошибке, поэтому здесь допустима техническая конкретика: это
+   диагностика клиента, а не рекламная страница.
+   Данные — в routers/happ.py (HAPP_ERRORS, QUICK_CHECKS).
+   ═══════════════════════════════════════════════════════════════ #}
+
+{# Пометка происхождения разбора. Классы расписаны литерально, а не собраны
+   из строк: сборка Tailwind (website/tailwind/build.sh) сканирует шаблоны и
+   динамически склеенные имена классов не находит. Подписи держим здесь, рядом
+   с легендой, которая их объясняет; значения origin — в routers/happ.py. #}
+{% macro origin_badge(origin) -%}
+  {%- if origin == 'docs' -%}
+    <span class="inline-flex items-center text-xs font-semibold rounded-full px-3 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 whitespace-nowrap">По документации Happ</span>
+  {%- elif origin == 'http' -%}
+    <span class="inline-flex items-center text-xs font-semibold rounded-full px-3 py-1 bg-sky-500/10 text-sky-300 border border-sky-500/30 whitespace-nowrap">Ответ сервера</span>
+  {%- else -%}
+    <span class="inline-flex items-center text-xs font-semibold rounded-full px-3 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/30 whitespace-nowrap">По опыту поддержки</span>
+  {%- endif -%}
+{%- endmacro %}
+
+{% block title %}Ошибки Happ: что означают и как исправить{% endblock %}
+{% block meta_description %}Разбор ошибок приложения Happ: критическая ошибка Xray Core, ошибка TLS-рукопожатия, ошибка гео-файлов, 404 и 502, тайм-аут. Что означает каждое сообщение и что сделать.{% endblock %}
+{% block meta_keywords %}happ ошибка, ошибка xray core, happ критическая ошибка, ошибка tls рукопожатия, ошибка гео файлов happ, happ ошибка 502, happ ошибка 404, happ ошибка ядра{% endblock %}
+{% block canonical %}https://horizancevpn.com/happ/oshibki{% endblock %}
+{% block og_title %}Ошибки Happ: что означают и как исправить{% endblock %}
+{% block og_description %}Справочник сообщений об ошибках в Happ — что стоит за каждым и какие действия помогают.{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto px-6 py-14">
+
+  <nav class="text-sm mb-6" aria-label="Хлебные крошки">
+    <a href="/happ" class="text-dim hover:text-ink transition-colors">&larr; Ключ и подписка для Happ</a>
+  </nav>
+
+  <h1 class="text-3xl md:text-[2.5rem] font-extrabold tracking-tight leading-[1.12] mb-5">
+    Ошибки Happ: что они означают и что делать
+  </h1>
+
+  <p class="text-lg text-dim leading-relaxed mb-4">
+    Happ работает поверх ядра Xray: часть сообщений выдаёт само приложение, часть приходит от ядра,
+    а часть — это обычные коды ответа сервера подписки. Формулировки выглядят техническими, но за
+    ними стоит небольшой набор понятных причин: неполная ссылка, недоступный узел, состояние сети
+    или настройки на устройстве.
+  </p>
+  <p class="text-dim leading-relaxed mb-4">
+    Ниже — разбор сообщений, которые встречаются чаще других. У каждого разбора указано, откуда
+    взята расшифровка, и это важнее, чем кажется: часть сообщений описана в
+    <a href="https://www.happ.su/main/ru/faq/errors" target="_blank" rel="noopener noreferrer" class="text-primary hover:underline">документации самого Happ</a>,
+    а у части — например, у «критической ошибки Xray Core» — официальной расшифровки нет вообще.
+    Там, где её нет, мы так и пишем: это разбор по обращениям в поддержку, а не цитата из документации.
+  </p>
+  <div class="bg-surface border border-line rounded-2xl p-5 mb-10">
+    <p class="text-sm text-dim leading-relaxed">
+      <span class="text-ink2 font-semibold">Как читать пометки.</span>
+      «По документации Happ» — формулировка и причина взяты из официальной документации приложения.
+      «Ответ сервера» — это не сообщение Happ, а стандартный код HTTP, значение которого одинаково
+      для любого сайта. «По опыту поддержки» — сообщение существует, но нигде официально не
+      расшифровано; мы объясняем, что за ним обычно стоит, и не выдаём это за документацию.
+    </p>
+  </div>
+
+  <!-- ═══ Предложение: сюда приходят из Яндекса люди, у которых Happ не подключается,
+       часто с ключом другого сервиса; до 01.10.26 на странице не было триала ═══ -->
+  <aside class="mb-10 bg-surface border border-line rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+    <p class="text-sm text-dim leading-relaxed flex-1">
+      <span class="text-ink2 font-semibold">Ключ перестал работать?</span>
+      Проверьте Happ с нашей подпиской: 24 часа бесплатно, без регистрации и без карты.
+    </p>
+    <a href="/trial?src=happ_errors" class="shrink-0 text-center bg-primary hover:bg-primary-light text-white text-sm font-semibold rounded-xl px-5 py-3 transition-colors">
+      Получить ключ на 24 часа
+    </a>
+  </aside>
+
+  <!-- ═══ Быстрая проверка ═══ -->
+  <section class="bg-surface border border-line rounded-2xl p-7 mb-12" aria-labelledby="quick-title">
+    <h2 id="quick-title" class="text-xl font-bold tracking-tight mb-4">Быстрая проверка за минуту</h2>
+    <p class="text-sm text-dim leading-relaxed mb-5">
+      Прежде чем искать конкретную ошибку — пять действий, которые снимают заметную часть проблем:
+    </p>
+    <ol class="text-sm text-dim leading-relaxed space-y-3 list-decimal list-inside">
+      {% for check in quick_checks %}
+      <li>{{ check }}</li>
+      {% endfor %}
+    </ol>
+  </section>
+
+  <!-- ═══ Оглавление ═══ -->
+  <nav class="mb-12" aria-label="Список ошибок">
+    <h2 class="text-xl font-bold tracking-tight mb-4">Сообщения об ошибках</h2>
+    <ul class="space-y-2">
+      {% for error in errors %}
+      <li>
+        <a href="#{{ error.id }}" class="block bg-surface2 border border-line2 rounded-xl px-4 py-3 text-sm text-ink2 hover:border-faint hover:text-white transition-colors">
+          {{ error.title }}
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+  </nav>
+
+  <!-- ═══ Разборы ═══ -->
+  <div class="space-y-12">
+    {% for error in errors %}
+    <section id="{{ error.id }}" aria-labelledby="{{ error.id }}-title" class="scroll-mt-24">
+      <h2 id="{{ error.id }}-title" class="text-2xl font-bold tracking-tight text-ink2 mb-3">{{ error.title }}</h2>
+
+      <div class="mb-4">{{ origin_badge(error.origin) }}</div>
+
+      <p class="text-dim leading-relaxed mb-3">{{ error.meaning }}</p>
+
+      {% if error.source %}
+      <p class="text-xs text-faint leading-relaxed mb-5">
+        {% if error.origin == 'experience' %}Что здесь можно сверить с документацией:{% else %}Источник:{% endif %}
+        <a href="{{ error.source.href }}" target="_blank" rel="noopener noreferrer" class="underline hover:text-dim transition-colors">{{ error.source.text }}</a>
+      </p>
+      {% else %}
+      <p class="text-xs text-faint leading-relaxed mb-5">
+        Официального описания у этого сообщения нет — ниже разбор по обращениям в поддержку, а не цитата из документации.
+      </p>
+      {% endif %}
+
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <div class="text-sm font-semibold text-ink2 mb-3">Что сделать</div>
+        <ol class="text-sm text-dim leading-relaxed space-y-2.5 list-decimal list-inside">
+          {% for step in error.steps %}
+          <li>{{ step }}</li>
+          {% endfor %}
+        </ol>
+        {% if error.link %}
+        <p class="text-sm mt-4">
+          <a href="{{ error.link.href }}" class="text-primary hover:underline">{{ error.link.text }}</a>
+        </p>
+        {% endif %}
+      </div>
+    </section>
+    {% endfor %}
+  </div>
+
+  <!-- ═══ Если ничего не помогло ═══ -->
+  <section class="mt-14 bg-surface border border-line rounded-2xl p-7" aria-labelledby="support-title">
+    <h2 id="support-title" class="text-xl font-bold tracking-tight mb-3">Если ничего не помогло</h2>
+    <p class="text-dim leading-relaxed text-sm mb-5">
+      Напишите команду <code>/help</code> в Telegram-боте: следующее ваше сообщение уйдёт в поддержку.
+      Полезно сразу указать точный текст ошибки, платформу (Android, iOS, Windows, macOS, Linux)
+      и то, что уже пробовали, — это заметно сокращает переписку.
+    </p>
+    <a href="/go/bot?src=happ_errors" target="_blank" rel="noopener noreferrer"
+       class="inline-flex items-center gap-2.5 bg-surface2 border border-line2 rounded-xl px-5 py-3 text-sm font-semibold text-ink2 hover:border-faint hover:text-white transition-colors">
+      <i class="fa-brands fa-telegram text-lg text-dim" aria-hidden="true"></i>
+      Написать в поддержку
+    </a>
+  </section>
+
+  <!-- ═══ Смежные страницы ═══ -->
+  <section class="mt-12" aria-labelledby="related-title">
+    <h2 id="related-title" class="text-xl font-bold tracking-tight mb-4">Смежные страницы</h2>
+    <ul class="space-y-2 text-sm">
+      <li><a href="/happ" class="text-primary hover:underline">Ключ и подписка для Happ</a> — как получить рабочую ссылку и чем ключ отличается от подписки.</li>
+      <li><a href="/blog/kak-podklyuchit-horizance" class="text-primary hover:underline">Подключение по шагам</a> — инструкция для Android, iOS и компьютера.</li>
+      <li><a href="/status" class="text-primary hover:underline">Что работает сейчас</a> — статус протоколов и сервисов с датой последней проверки.</li>
+      <li><a href="/faq" class="text-primary hover:underline">Частые вопросы</a> — оплата, ссылка после продления, открытие ссылки в приложении.</li>
+    </ul>
+  </section>
+</div>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {"@type": "ListItem", "position": 1, "name": "Главная", "item": "https://horizancevpn.com/"},
+    {"@type": "ListItem", "position": 2, "name": "Ключ и подписка для Happ", "item": "https://horizancevpn.com/happ"},
+    {"@type": "ListItem", "position": 3, "name": "Ошибки Happ", "item": "https://horizancevpn.com/happ/oshibki"}
+  ]
+}
+</script>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {% for error in errors %}
+    {
+      "@type": "Question",
+      "name": {{ error.title | tojson }},
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": {{ (error.meaning ~ " Что сделать: " ~ (error.steps | join(" "))) | tojson }}
+      }
+    }{{ "," if not loop.last }}
+    {% endfor %}
+  ]
+}
+</script>
+{% endblock %}

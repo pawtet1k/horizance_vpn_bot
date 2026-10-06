@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none">
+  <!--
+    Геометрия снята попиксельно с icon-192x192.png (масштаб 0.625):
+    центр (59.7, 62.5), глобус r=51.1/53.3, солнце r=33.75,
+    лучи r 43..59 под углами 90°, ±59.4°, ±28.9°.
+  -->
+  <defs>
+    <linearGradient id="hzg" x1="0" y1="0" x2="120" y2="120" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5ea0ff"/>
+      <stop offset="1" stop-color="#1246b8"/>
+    </linearGradient>
+  </defs>
+  <!-- лучи солнца -->
+  <g stroke="url(#hzg)" stroke-width="6" stroke-linecap="round">
+    <line x1="59.7" y1="19.4" x2="59.7" y2="3.9"/>
+    <line x1="37.8" y1="25.5" x2="29.8" y2="11.9"/>
+    <line x1="81.6" y1="25.5" x2="89.6" y2="11.9"/>
+    <line x1="22.0" y1="41.7" x2="8.3"  y2="34.1"/>
+    <line x1="97.4" y1="41.7" x2="111.1" y2="34.1"/>
+  </g>
+  <!-- солнце на линии горизонта -->
+  <path d="M25.2 62.5 A34.4 34.4 0 0 1 94.0 62.5" stroke="url(#hzg)" stroke-width="6.2" stroke-linecap="round" fill="none"/>
+  <!-- глобус-полусфера -->
+  <g stroke="url(#hzg)" stroke-width="6" stroke-linecap="round" fill="none">
+    <path d="M8.3 62.5 H111.1"/>
+    <path d="M8.3 62.5 A51.4 53.8 0 0 0 111.1 62.5"/>
+    <path d="M15.9 90 H103.5"/>
+    <line x1="59.7" y1="62.5" x2="59.7" y2="115.8"/>
+    <path d="M32.2 62.5 A27.5 53.3 0 0 0 87.2 62.5"/>
+  </g>
+</svg>

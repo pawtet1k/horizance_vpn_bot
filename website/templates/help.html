@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block title %}Поддержка — Horizance VPN{% endblock %}
+{% block meta_description %}Напишите в поддержку Horizance VPN.{% endblock %}
+{% block canonical %}https://horizancevpn.com/help{% endblock %}
+{% block robots %}noindex, follow{% endblock %}
+
+{% block content %}
+<section class="max-w-2xl mx-auto px-6 py-12">
+
+  {% if is_authenticated %}
+  <a href="/dashboard" class="text-dim text-sm hover:text-ink transition-colors mb-6 inline-flex items-center gap-2">
+    <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> В личный кабинет
+  </a>
+  {% else %}
+  <a href="/" class="text-dim text-sm hover:text-ink transition-colors mb-6 inline-flex items-center gap-2">
+    <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> На главную
+  </a>
+  {% endif %}
+
+  <h1 class="text-2xl font-bold tracking-tight mb-6">Написать в поддержку</h1>
+
+  {% if error_message %}
+  <div class="bg-surface border border-line rounded-2xl p-4 mb-4 text-ink2 text-sm">
+    {{ error_message }}
+  </div>
+  {% endif %}
+
+  {% if faq and not thanks_message %}
+  {# Половина обращений — это вопросы, ответ на которые уже написан.
+     Показываем их до формы и в свёрнутом виде: человек, который точно знает,
+     что хочет написать, пролистывает мимо за секунду, а тот, кто ищет
+     решение, находит его здесь и не ждёт ответа сутки. #}
+  <details class="mb-6 bg-surface border border-line rounded-2xl">
+    <summary class="px-6 py-4 cursor-pointer select-none text-sm text-ink2 font-medium">
+      Сначала загляните сюда — возможно, ответ уже есть
+    </summary>
+    <div class="px-6 pb-6">
+      {% include "_faq_accordion.html" %}
+    </div>
+  </details>
+  {% endif %}
+
+  {% if thanks_message %}
+  <div class="bg-surface border border-line rounded-2xl p-6 text-ink2 leading-relaxed">
+    {{ thanks_message }}
+  </div>
+  {% else %}
+  <form method="post" action="/help" data-busy="send" data-t="help_submit" class="bg-surface border border-line rounded-2xl p-6">
+
+    {% if not is_authenticated %}
+    {# Аноним: входа нет, значит нет и Telegram ID — без контакта ответить некуда. #}
+    <label for="contact" class="block text-dim text-sm mb-3">
+      Куда вам ответить — почта или @имя в Telegram:
+    </label>
+    <input id="contact" name="contact" type="text" maxlength="200"
+      class="w-full bg-surface2 border border-line2 rounded-xl p-4 text-ink placeholder-mute
+             focus:outline-none focus:border-primary transition-colors mb-4"
+      placeholder="you@example.com или @username">
+    {% endif %}
+
+    <label for="question" class="block text-dim text-sm mb-3">Задайте ваш вопрос:</label>
+    <textarea id="question" name="question" required rows="5" maxlength="4000"
+      class="w-full bg-surface2 border border-line2 rounded-xl p-4 text-ink placeholder-mute
+             focus:outline-none focus:border-primary transition-colors mb-4"
+      placeholder="Опишите проблему или вопрос..."></textarea>
+    <button type="submit"
+      class="w-full bg-white text-black font-semibold rounded-xl py-4
+             transition-opacity duration-150 hover:opacity-90 cursor-pointer">
+      Отправить
+    </button>
+
+    {% if not is_authenticated %}
+    <p class="text-xs text-dim mt-4 leading-relaxed">
+      Если вы уже наш подписчик, <a href="/auth" class="underline hover:text-ink">войдите</a> —
+      тогда мы сразу увидим вашу подписку и разберёмся быстрее.
+    </p>
+    {% endif %}
+  </form>
+  {% endif %}
+
+</section>
+{% endblock %}
