@@ -12,6 +12,8 @@
   * Все оплаты — по ДАТЕ ПЛАТЕЖА: строки «подписка активирована через UDM Pay|NOWPayments» в
     my_logger/info/ только для id из users (тестовые отсеиваются), плюс оплаты, которые бот
     потерял и зачислил позже, — на день реальной оплаты (LOST_PAYMENTS).
+  * Продление — из впервые заплативших помесячно: продлили (оплата ещё раз позже недели после первой) против
+    не продлили («оплачено до» в БД прошло больше 3 дней назад). Считается на сегодня, не на --to.
   * Конверсия — из пришедших в бот, у кого 14-дневный триал уже кончился, доля с paid_periods > 0.
 """
 import argparse
@@ -40,7 +42,11 @@ def collect(db_path="users.db"):
     c = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     users = {u: (datetime.strptime(sd, "%d.%m.%y").date(), pp or 0, price)
              for u, sd, pp, price in c.execute("SELECT user_id, start_date, paid_periods, price FROM users")}
+    # оплачено до (бонусы за приглашённых и промо тоже двигают дату, поэтому не «оплата + 30 дней»)
+    paid_until = {u: datetime.strptime(d, "%d.%m.%y").date()
+                  for u, d in c.execute("SELECT user_id, next_payment_date FROM users")}
     bot, tri, pay, first = (collections.Counter() for _ in range(4))
+    newcomers = {}  # впервые заплатившие помесячно (не до UDM Pay) -> даты оплат
     for sd, _, _ in users.values():
         bot[sd] += 1
     for (ca,) in c.execute("SELECT created_at FROM trial_sessions"):
@@ -64,8 +70,10 @@ def collect(db_path="users.db"):
         paid_before_udm = start < UDM_START and paid_months > logged_months
         if not paid_before_udm:
             first[min(days)] += 1
+            if price != 999:
+                newcomers[uid] = (paid_until[uid], sorted(days))
     cohort = [(sd, pp) for sd, pp, _ in users.values()]
-    return bot, tri, pay, first, cohort, paid_days
+    return bot, tri, pay, first, cohort, paid_days, newcomers
 
 
 def main():
@@ -74,7 +82,7 @@ def main():
     ap.add_argument("--to", dest="end", type=date.fromisoformat,
                     default=datetime.now(MSK).date() - timedelta(days=1))
     a = ap.parse_args()
-    bot, tri, pay, first, users, paid_days = collect()
+    bot, tri, pay, first, users, paid_days, newcomers = collect()
     # окно средних считаем от FIRST_DAY, чтобы --from не обнулял начало средних
     days = [FIRST_DAY + timedelta(i) for i in range((a.end - FIRST_DAY).days + 1)]
 
@@ -97,6 +105,16 @@ def main():
     cutoff = a.end - timedelta(days=TRIAL_DAYS)
     cohort = [pp for d, pp in users if FIRST_DAY <= d <= cutoff]
     paid = sum(1 for pp in cohort if pp > 0)
+    # Удержание (первое продление) на СЕГОДНЯ: продлил — заплатил ещё раз позже недели после первой оплаты (повтор
+    # в пределах недели — двойное нажатие); не продлил — заплатил один раз, а «оплачено до» прошло больше 3 дней
+    # назад. У остальных срок ещё не подошёл. Годовые не считаются — им продлевать через год.
+    today = datetime.now(MSK).date()
+    renewed = [u for u, (_, ds) in newcomers.items() if any(d > ds[0] + timedelta(days=7) for d in ds)]
+    churned = [u for u, (until, ds) in newcomers.items() if u not in renewed and until + timedelta(days=3) < today]
+    waiting = len(newcomers) - len(renewed) - len(churned)
+    if renewed or churned:
+        print(f"Продление (на {today:%d.%m}): продлили {len(renewed)}, не продлили {len(churned)} "
+              f"({100 * len(renewed) / (len(renewed) + len(churned)):.0f}% удержания); у {waiting} срок ещё не подошёл")
     print(f"\nКонверсия: пришли в бот {FIRST_DAY:%d.%m}–{cutoff:%d.%m} (триал кончился) — "
           f"оплатили {paid} из {len(cohort)} ({100 * paid / len(cohort):.0f}%)")
 
