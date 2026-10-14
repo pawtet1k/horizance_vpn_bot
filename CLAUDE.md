@@ -10,8 +10,9 @@ live in production since 2026-08-13 — see below; YooKassa integration is dead 
 actually used), and provisions/revokes VPN client credentials across one or more remote Xray
 servers over SSH.
 
-This is not a git repository — there is no version control here, so be extra careful with
-destructive file operations and confirm before overwriting anything.
+This is a git repository with a private GitHub remote `origin` = github.com/pawtet1k/horizance_vpn_bot (pushed 2026-10-14;
+`gh` is logged in as pawtet1k). Secrets, databases, logs and `payment_outage.json` are in `.gitignore` — check
+`git status` before every commit that nothing with user data or keys slips in. Still confirm before destructive file operations.
 
 **Owner's notes and feedback for agents** live in
 `/home/pashavpsadm/.claude/projects/-home-pashavpsadm-horizance-vpn-bot/memory/` (index: `MEMORY.md`).
@@ -255,3 +256,18 @@ existing tone/emoji conventions) unless told otherwise.
 - Метки источника: все ссылки сайта на бота — `/go/bot?src=<страница>` → `t.me/…?start=site_<страница>` (`settings.site_bot_link`);
   бот пишет «Пришёл с сайта: <страница>» и ставит пригласившим владельца, как раньше (stats_growth «ссылка с сайта»). Ссылки в статьях
   блога (`blog_articles.json`) — `src=blog_<slug>`. Нечисловой /start больше не роняет создание пользователя.
+- **Вход на сайт через бота (14.10, вторая половина дня):** /auth показывает QR (компьютер) или кнопку (телефон) со ссылкой
+  `t.me/…?start=login_<token>`; таблица `web_logins` в users.db (сайт пишет, бот читает). `main.start` перехватывает `login_*` до
+  `handle_start` → `bot.handle_web_login` спрашивает «Войти на сайт?» с устройством и городом → `wl_ok/wl_no` → сайт по
+  `/api/auth/bot/status` заводит сессию (`auth._sign_in`, общий с виджетом). Токен — только в сессии того браузера, который его
+  получил. Срок: QR 180 с, после открытия в боте ещё 300 с. Виджет Telegram остался запасной кнопкой «Войти по номеру телефона».
+- `/help` — сначала кнопки быстрых ответов (`bot.HELP_FAQ`: устройства, кабинет, не подключается, iPhone/INCY), свой вопрос по-прежнему
+  следующим сообщением.
+- Happ-заглушка истёкшего триала: «веб-страница» → `/go/pay?src=happ_trial_over` — пробует открыть бота (tg://), через 3 с без ухода
+  со страницы — `/pay` сайта.
+- `INCY_ROUTING_ENABLED = True` (владелец проверил: Яндекс видит реальный IP, Google — IP VPN).
+- `payment_outage.json` → `queued`: тексты, одобренные «отправить, когда заработает оплата» (доп. устройства donrava/Goystar/namakx);
+  уходят из `notify_recovered` после рассылки. Файл в .gitignore.
+- Даты публикации на страницах статей убраны (владелец); в JSON-LD остались, `dateModified` = `modified_iso` статьи, если есть.
+- Бэкап: `backup_db.py`, crontab каждые 6 ч → `~/backups/horizance_vpn_bot/` (28 копий). Копии вне сервера нет.
+- 14.10 диск NL был заполнен на 100% (174 МБ); почищены кэши apt/snap и журнал, journald ограничен 100 МБ — свободно ~1,4 ГБ.
