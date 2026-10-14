@@ -40,6 +40,12 @@ def init_tables() -> None:
             last_seen TEXT NOT NULL,
             PRIMARY KEY (user_id, hwid)
         )''')
+        try:
+            # устройство, которое владелец подписки убрал сам (/devices): слот свободен, а самому устройству
+            # /sub отдаёт заглушку, пока его не вернут — иначе при первом же обновлении оно заняло бы слот снова
+            conn.execute("ALTER TABLE devices ADD COLUMN removed_at TEXT")
+        except sqlite3.OperationalError:
+            pass  # столбец уже есть
         conn.execute('''CREATE TABLE IF NOT EXISTS banned (
             kind TEXT NOT NULL,          -- 'ip' | 'hwid'
             value TEXT NOT NULL,
@@ -140,12 +146,72 @@ def _other_trial_with_hwid(user_id: str, hwid: str) -> str | None:
     return row["user_id"] if row else None
 
 
+def extra_devices_active(until: str | None) -> bool:
+    """Докупленные устройства (settings.EXTRA_DEVICES_*) действуют по дату until (dd.mm.yy) включительно."""
+    if not until:
+        return False
+    try:
+        return datetime.strptime(until, "%d.%m.%y").date() >= datetime.now().date()
+    except ValueError:
+        return False
+
+
+def _active_hwids(conn, user_id: str) -> list[str]:
+    """Активные устройства по порядку подключения; служебные (DEVICE_LIMIT_EXEMPT_HWIDS) в лимит не входят."""
+    return [r["hwid"] for r in conn.execute(
+        "SELECT hwid FROM devices WHERE user_id=? AND removed_at IS NULL ORDER BY first_seen, hwid", (user_id,))
+        if r["hwid"] not in settings.DEVICE_LIMIT_EXEMPT_HWIDS]
+
+
+def device_limit(user: dict) -> int:
+    extra = settings.EXTRA_DEVICES_COUNT if extra_devices_active(user.get("extra_devices_until")) else 0
+    return settings.DEVICE_LIMIT + extra
+
+
+def list_devices(user_id) -> list[dict]:
+    """Устройства подписки для /devices: сначала активные (по первому появлению), потом убранные."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT hwid, model, first_seen, last_seen, removed_at FROM devices WHERE user_id=? "
+            "ORDER BY removed_at IS NOT NULL, first_seen", (str(user_id),)
+        ).fetchall()
+    return [dict(r) for r in rows if r["hwid"] not in settings.DEVICE_LIMIT_EXEMPT_HWIDS]
+
+
+def remove_device(user_id, hwid: str) -> bool:
+    with _connect() as conn:
+        changed = conn.execute(
+            "UPDATE devices SET removed_at=? WHERE user_id=? AND hwid=? AND removed_at IS NULL",
+            (_now(), str(user_id), hwid)
+        ).rowcount
+    if changed:
+        logger.info(f"{user_id}: устройство hwid={hwid} убрано владельцем подписки")
+    return bool(changed)
+
+
+def restore_device(user: dict, hwid: str) -> str | None:
+    """Вернуть убранное устройство. None — вернули; 'device_limit' — нет свободного слота; 'unknown' — нет такого."""
+    user_id = str(user["user_id"])
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM devices WHERE user_id=? AND hwid=? AND removed_at IS NOT NULL", (user_id, hwid)
+        ).fetchone()
+        if not row:
+            return "unknown"
+        if len(_active_hwids(conn, user_id)) >= device_limit(user):
+            return "device_limit"
+        conn.execute("UPDATE devices SET removed_at=NULL WHERE user_id=? AND hwid=?", (user_id, hwid))
+    logger.info(f"{user_id}: устройство hwid={hwid} возвращено владельцем подписки")
+    return None
+
+
 def device_refusal(user: dict, hwid: str, model: str) -> str | None:
     """Проверяет устройство при запросе /sub и запоминает его.
 
     None — отдавать подписку как обычно; иначе причина отказа:
     'banned', 'trial_reuse' (второй триал с того же телефона за
-    TRIAL_WINDOW_DAYS), 'device_limit' (больше DEVICE_LIMIT устройств).
+    TRIAL_WINDOW_DAYS), 'device_limit' (больше device_limit(user) устройств),
+    'device_removed' (владелец подписки убрал это устройство в /devices).
     Уже известное устройство пропускается всегда: заглушка должна доставаться
     только новому, а не выбивать того, кто пользовался первым.
     """
@@ -157,17 +223,19 @@ def device_refusal(user: dict, hwid: str, model: str) -> str | None:
     now = _now()
     with _connect() as conn:
         known = conn.execute(
-            "SELECT 1 FROM devices WHERE user_id=? AND hwid=?", (user_id, hwid)
+            "SELECT removed_at FROM devices WHERE user_id=? AND hwid=?", (user_id, hwid)
         ).fetchone()
         if known:
             conn.execute(
                 "UPDATE devices SET last_seen=? WHERE user_id=? AND hwid=?",
                 (now, user_id, hwid)
             )
-            return None
-        count = conn.execute(
-            "SELECT COUNT(*) FROM devices WHERE user_id=?", (user_id,)
-        ).fetchone()[0]
+            if known["removed_at"]:
+                return "device_removed"
+            # доп. устройства закончились, а подключено больше лимита: работают первые по времени подключения,
+            # остальным заглушка, пока владелец не уберёт лишние в /devices или не продлит опцию
+            return "device_limit" if hwid in _active_hwids(conn, user_id)[device_limit(user):] else None
+        count = len(_active_hwids(conn, user_id))
     if user_id.startswith("t_"):
         other = _other_trial_with_hwid(user_id, hwid)
         if other:
@@ -175,9 +243,10 @@ def device_refusal(user: dict, hwid: str, model: str) -> str | None:
                 f"ПОВТОРНЫЙ ТРИАЛ: {user_id} hwid={hwid} уже брал {other}"
             )
             return "trial_reuse"
-    if count >= settings.DEVICE_LIMIT:
+    limit = device_limit(user)
+    if count >= limit:
         logger.warning(
-            f"УСТРОЙСТВО СВЕРХ ЛИМИТА {settings.DEVICE_LIMIT}: {user_id} уже {count}, "
+            f"УСТРОЙСТВО СВЕРХ ЛИМИТА {limit}: {user_id} уже {count}, "
             f"отказ hwid={hwid} ({model})"
         )
         return "device_limit"
@@ -186,7 +255,7 @@ def device_refusal(user: dict, hwid: str, model: str) -> str | None:
             "INSERT INTO devices (user_id, hwid, model, first_seen, last_seen) "
             "VALUES (?, ?, ?, ?, ?)", (user_id, hwid, model, now, now)
         )
-    logger.info(f"{user_id}: новое устройство {count + 1}/{settings.DEVICE_LIMIT} hwid={hwid} ({model})")
+    logger.info(f"{user_id}: новое устройство {count + 1}/{limit} hwid={hwid} ({model})")
     return None
 
 

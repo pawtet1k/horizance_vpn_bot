@@ -13,10 +13,10 @@ _ALERT_COOLDOWN = 30 * 60
 _last_sent: dict[str, float] = {}
 
 
-def notify(key: str, subject: str, body: str) -> None:
-    """Письмо с защитой от повторов: не чаще раза в _ALERT_COOLDOWN на key."""
+def notify(key: str, subject: str, body: str, cooldown: int = _ALERT_COOLDOWN) -> None:
+    """Письмо с защитой от повторов: не чаще раза в cooldown секунд на key."""
     now = time.time()
-    if now - _last_sent.get(key, 0) < _ALERT_COOLDOWN:
+    if now - _last_sent.get(key, 0) < cooldown:
         return
     _last_sent[key] = now
     send_email(subject=subject, body=body, to=settings.NOTIFY_EMAIL)

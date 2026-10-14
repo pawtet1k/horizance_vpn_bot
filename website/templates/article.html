@@ -105,8 +105,6 @@
     <h1 class="text-3xl md:text-[2.75rem] font-extrabold tracking-tight leading-[1.12] mb-5">{{ article.title }}</h1>
 
     <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-faint font-mono">
-      <time datetime="{{ article.published_iso }}">{{ article.published }}</time>
-      <span aria-hidden="true">·</span>
       <span>{{ reading_time }} мин чтения</span>
       <span aria-hidden="true">·</span>
       <span class="text-dim">Horizance</span>
@@ -206,7 +204,6 @@
         {% endif %}
         <div class="p-5">
           <h3 class="font-semibold text-ink2 leading-snug mb-2 group-hover:text-white transition-colors">{{ item.title }}</h3>
-          <p class="text-xs text-faint font-mono">{{ item.published }}</p>
         </div>
       </a>
       {% endfor %}
@@ -228,7 +225,7 @@
     "logo": {"@type": "ImageObject", "url": "https://horizancevpn.com/static/img/logo.png"}
   },
   "datePublished": {{ article.published_iso | tojson }},
-  "dateModified": {{ article.published_iso | tojson }},{% if article.image %}
+  "dateModified": {{ (article.modified_iso or article.published_iso) | tojson }},{% if article.image %}
   "image": "https://horizancevpn.com{{ article.image }}",{% endif %}
   "mainEntityOfPage": "https://horizancevpn.com/blog/{{ article.slug }}"
 }

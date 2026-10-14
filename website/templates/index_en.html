@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{# Английская главная для иностранцев (решение владельца 10.10.26). Показывается вместо index.html, когда
+   request.state.en (app.site_language): язык браузера не русский и IP не российский. Роботы всегда получают
+   русскую index.html — продвижение идёт в русском поиске. Факты сверены с settings/credentials 11.10.26. #}
+
+{% block title %}Horizance VPN — fast, stable VPN on VLESS Reality{% endblock %}
+{% block meta_description %}Horizance VPN — a personal VPN on VLESS Reality. Servers in 6 countries, up to 3 devices, from $1.8 per month by card or cryptocurrency. Free 24-hour trial, no sign-up.{% endblock %}
+{% block canonical %}https://horizancevpn.com/{% endblock %}
+
+{% block content %}
+<section class="relative overflow-hidden border-b border-line">
+  <div class="absolute inset-0 -z-10 opacity-40"
+       style="background: radial-gradient(60% 50% at 50% 0%, #2563eb33, transparent 70%), radial-gradient(40% 40% at 85% 20%, #22d3ee22, transparent 70%);"
+       aria-hidden="true"></div>
+  <div class="max-w-5xl mx-auto px-6 pt-20 pb-16 text-center">
+    <div class="inline-flex items-center gap-2 text-xs font-mono text-dim border border-line2 rounded-full px-4 py-1.5 mb-8 bg-surface">
+      <span class="relative flex h-2 w-2"><span class="connect-line absolute inline-flex h-full w-full rounded-full bg-emerald-400"></span></span>
+      <span>VLESS · Reality · 6 countries</span>
+    </div>
+    <h1 class="text-4xl md:text-6xl font-extrabold tracking-tight leading-[1.05] mb-6">
+      A personal VPN<br/><span class="text-primary-light">that stays connected</span>
+    </h1>
+    <p class="text-lg text-dim max-w-2xl mx-auto mb-10 leading-relaxed">
+      Horizance is a VPN built on VLESS Reality. You get a ready-to-use subscription link and connect in the free
+      Happ app on your phone, computer or TV. Setup takes about two minutes.
+    </p>
+    <div class="flex flex-col sm:flex-row items-center justify-center gap-3">
+      <a href="/trial" class="w-full sm:w-auto bg-white text-black font-semibold rounded-xl px-7 py-4 hover:opacity-90 transition-opacity">
+        Try free for 24 hours
+      </a>
+      <a href="/go/bot?src=home_en" class="w-full sm:w-auto flex items-center justify-center gap-2 border border-line2 text-ink2 font-semibold rounded-xl px-7 py-4 hover:border-faint hover:bg-surface2 transition-colors">
+        <i class="fa-brands fa-telegram text-lg" aria-hidden="true"></i> {{ settings.trial_days }} days free in Telegram
+      </a>
+    </div>
+    <p class="text-xs text-faint mt-4">No card and no sign-up for the 24-hour trial.</p>
+  </div>
+</section>
+
+<section id="how" class="border-b border-line">
+  <div class="max-w-5xl mx-auto px-6 py-16">
+    <h2 class="text-2xl font-bold tracking-tight mb-8">How it works</h2>
+    <div class="grid md:grid-cols-3 gap-5">
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <div class="text-sm font-mono text-faint mb-2">01</div>
+        <div class="font-semibold mb-2">Install Happ</div>
+        <p class="text-sm text-dim leading-relaxed">Free app for iPhone, Android, Windows, macOS, Linux and Android TV / Apple TV.</p>
+      </div>
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <div class="text-sm font-mono text-faint mb-2">02</div>
+        <div class="font-semibold mb-2">Get your link</div>
+        <p class="text-sm text-dim leading-relaxed">On the website (24 hours free) or in our Telegram bot ({{ settings.trial_days }} days free for new users).</p>
+      </div>
+      <div class="bg-surface border border-line rounded-2xl p-6">
+        <div class="text-sm font-mono text-faint mb-2">03</div>
+        <div class="font-semibold mb-2">Connect</div>
+        <p class="text-sm text-dim leading-relaxed">Pick any server in the app and tap connect. The server list updates by itself.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="platforms" class="border-b border-line bg-surface/40">
+  <div class="max-w-5xl mx-auto px-6 py-16">
+    <h2 class="text-2xl font-bold tracking-tight mb-3">Servers</h2>
+    <p class="text-dim max-w-2xl mb-6 leading-relaxed">One subscription gives you every server. Switch between them in the app at any time.</p>
+    <div class="flex flex-wrap gap-2">
+      {% for flag, name in [("🇳🇱", "Netherlands"), ("🇩🇪", "Germany"), ("🇺🇸", "USA"), ("🇲🇽", "Mexico"), ("🇰🇿", "Kazakhstan"), ("🇷🇺", "Russia")] %}
+      <span class="bg-surface border border-line2 rounded-xl px-4 py-2 text-sm text-ink2">{{ flag }} {{ name }}</span>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<section id="pricing" class="border-b border-line">
+  <div class="max-w-5xl mx-auto px-6 py-16">
+    <h2 class="text-2xl font-bold tracking-tight mb-3">Pricing</h2>
+    <p class="text-dim max-w-2xl mb-10 leading-relaxed">
+      Pay by card or Apple Pay, or with cryptocurrency (USDT and others). SBP is also available for Russian bank cards.
+    </p>
+    <div class="grid md:grid-cols-3 gap-5">
+      <div class="bg-surface border border-line rounded-2xl p-7">
+        <div class="text-sm font-semibold text-dim mb-1">Trial</div>
+        <div class="text-3xl font-extrabold mb-4">$0<span class="text-sm text-faint font-normal"> / 24 hours</span></div>
+        <ul class="text-sm text-dim space-y-2 mb-6"><li>No speed limits</li><li>No card needed</li><li>No sign-up</li></ul>
+        <a href="/trial" class="block text-center border border-line2 hover:border-faint hover:bg-surface2 text-ink2 font-semibold rounded-xl py-3 transition-colors">Try it</a>
+      </div>
+      <div class="bg-surface border-2 border-primary rounded-2xl p-7 relative">
+        <span class="absolute -top-3 left-7 bg-primary text-white text-xs font-semibold px-3 py-1 rounded-full">Popular</span>
+        <div class="text-sm font-semibold text-dim mb-1">Month</div>
+        <div class="text-3xl font-extrabold mb-1">${{ settings.CRYPTO_PRICE_USD[settings.default_price] }}<span class="text-sm text-faint font-normal"> / month</span></div>
+        <div class="text-xs text-faint mb-4">{{ settings.default_price }}&nbsp;RUB</div>
+        <ul class="text-sm text-dim space-y-2 mb-6"><li>Up to {{ settings.DEVICE_LIMIT }} devices</li><li>All servers</li><li>Support in Telegram</li></ul>
+        <a href="/auth?next=/pay" class="block text-center bg-primary hover:bg-primary-light text-white font-semibold rounded-xl py-3 transition-colors">Subscribe</a>
+      </div>
+      <div class="bg-surface border border-line rounded-2xl p-7">
+        <div class="text-sm font-semibold text-dim mb-1">Year</div>
+        <div class="text-3xl font-extrabold mb-1">${{ settings.CRYPTO_PRICE_USD[settings.yearly_price] }}<span class="text-sm text-faint font-normal"> / year</span></div>
+        <div class="text-xs text-faint mb-4">{{ settings.yearly_price }}&nbsp;RUB · −{{ settings.yearly_discount_percent }}%</div>
+        <ul class="text-sm text-dim space-y-2 mb-6"><li>Up to {{ settings.DEVICE_LIMIT }} devices</li><li>All servers</li><li>Save {{ settings.yearly_discount_percent }}% vs monthly</li></ul>
+        <a href="/auth?next=/pay" class="block text-center border border-line2 hover:border-faint hover:bg-surface2 text-ink2 font-semibold rounded-xl py-3 transition-colors">Subscribe</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="faq" class="bg-surface/40">
+  <div class="max-w-3xl mx-auto px-6 py-16">
+    <h2 class="text-2xl font-bold tracking-tight mb-6">FAQ</h2>
+    <div class="space-y-5 text-sm leading-relaxed">
+      <div><div class="font-semibold text-ink2 mb-1">Which app do I need?</div>
+        <p class="text-dim">Happ — free for iPhone, Android, Windows, macOS and Linux. On iPhone you can also use the free INCY app.</p></div>
+      <div><div class="font-semibold text-ink2 mb-1">How many devices can I use?</div>
+        <p class="text-dim">Up to {{ settings.DEVICE_LIMIT }} devices on one subscription.</p></div>
+      <div><div class="font-semibold text-ink2 mb-1">How do I pay from outside Russia?</div>
+        <p class="text-dim">By card or Apple Pay, or with cryptocurrency: choose a plan and then the payment method.</p></div>
+      <div><div class="font-semibold text-ink2 mb-1">How do I get help?</div>
+        <p class="text-dim">Write to our <a href="/go/bot?src=home_en_faq" class="underline">Telegram bot</a> — we reply within 24 hours.</p></div>
+    </div>
+  </div>
+</section>
+{% endblock %}

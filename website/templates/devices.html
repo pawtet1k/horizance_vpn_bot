@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t("Мои устройства", "My devices") }} — Horizance VPN{% endblock %}
+{% block meta_description %}{{ t("Устройства в подписке Horizance VPN.", "Devices on your Horizance VPN subscription.") }}{% endblock %}
+{% block canonical %}https://horizancevpn.com/devices{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
+
+{% block content %}
+{# 13.10.26: список устройств подписки, убрать/вернуть, докупка settings.EXTRA_DEVICES_COUNT устройств (как /devices в боте) #}
+<section class="max-w-2xl mx-auto px-6 py-12">
+
+  <a href="/dashboard" class="text-dim text-sm hover:text-ink transition-colors mb-6 inline-flex items-center gap-2">
+    <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> {{ t("В личный кабинет", "Back to account") }}
+  </a>
+
+  <h1 class="text-2xl font-bold tracking-tight mb-2">{{ t("Мои устройства", "My devices") }}</h1>
+  <p class="text-dim text-sm mb-2">{{ t("В подписке", "On your subscription") }}: {{ active|length }} {{ t("из", "of") }} {{ limit }}.</p>
+  <p class="text-dim text-sm mb-8">{{ t("Убранное устройство освобождает место для нового — новое подключается той же ссылкой.",
+                                         "Removing a device frees a slot for a new one — connect it with the same link.") }}</p>
+
+  {% if error == "limit" %}
+  <div class="bg-surface border border-line rounded-2xl p-4 mb-4 text-ink2 text-sm">
+    {{ t("Свободных мест нет: сначала уберите другое устройство или подключите доп. устройства.",
+         "No free slots: remove another device first or add extra devices.") }}
+  </div>
+  {% endif %}
+
+  <div class="flex flex-col gap-3 mb-8">
+    {% for d in active %}
+    <div class="bg-surface border border-line2 rounded-2xl p-4 flex items-center justify-between gap-4">
+      <div class="min-w-0">
+        <div class="font-semibold text-ink2 text-sm truncate">{{ d.model or "—" }}</div>
+        <div class="text-xs text-faint">{{ t("последний раз", "last seen") }} {{ d.last_seen[8:10] }}.{{ d.last_seen[5:7] }}</div>
+      </div>
+      <form method="post" action="/devices/remove">
+        <input type="hidden" name="hwid" value="{{ d.hwid }}">
+        <button type="submit" class="text-sm font-semibold rounded-xl px-4 py-2 border border-line2 text-ink2 hover:border-faint hover:bg-surface2 transition-colors">
+          {{ t("Убрать", "Remove") }}
+        </button>
+      </form>
+    </div>
+    {% else %}
+    <div class="bg-surface border border-line rounded-2xl p-6 text-dim text-sm">
+      {{ t("Пока ни одно устройство не подключено.", "No devices connected yet.") }}
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if removed %}
+  <h2 class="text-lg font-bold tracking-tight mb-3">{{ t("Отключены вами", "Removed by you") }}</h2>
+  <div class="flex flex-col gap-3 mb-8">
+    {% for d in removed %}
+    <div class="bg-surface border border-line rounded-2xl p-4 flex items-center justify-between gap-4">
+      <div class="font-semibold text-dim text-sm truncate min-w-0">{{ d.model or "—" }}</div>
+      <form method="post" action="/devices/restore">
+        <input type="hidden" name="hwid" value="{{ d.hwid }}">
+        <button type="submit" class="text-sm font-semibold rounded-xl px-4 py-2 border border-line2 text-ink2 hover:border-faint hover:bg-surface2 transition-colors">
+          {{ t("Вернуть", "Restore") }}
+        </button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {# Опция «доп. устройства» — часть подписки (settings.EXTRA_DEVICES_*): доплата за остаток срока, дальше одно продление #}
+  {% if quote.mode != "unavailable" %}
+  <div class="bg-surface border border-line2 rounded-2xl p-6 flex flex-col items-start gap-2">
+    <span class="text-sm font-semibold text-dim">{{ t("Доп. устройства", "Extra devices") }}: +{{ settings.EXTRA_DEVICES_COUNT }}</span>
+    {% if extra_status %}<p class="text-sm text-ink2">{{ extra_status }}</p>{% endif %}
+    {% if extra_on %}
+      <form method="post" action="/devices/extra/off" class="w-full mt-2">
+        <button type="submit" class="w-full text-center text-sm font-semibold rounded-xl py-3 border border-line2 text-ink2 hover:border-faint hover:bg-surface2 transition-colors">
+          {{ t("Отключить доп. устройства", "Turn off extra devices") }}
+        </button>
+      </form>
+    {% elif extra_paid %}
+      <form method="post" action="/devices/extra/on" class="w-full mt-2">
+        <button type="submit" class="w-full text-center text-sm font-semibold rounded-xl py-3 bg-white text-black hover:opacity-90 transition-opacity">
+          {{ t("Продлевать доп. устройства", "Keep renewing extra devices") }}
+        </button>
+      </form>
+    {% elif quote.mode == "prorate" %}
+      <p class="text-sm text-dim">{{ t("Подключатся сразу после доплаты за остаток оплаченного срока (до", "Added right after an extra charge for the rest of your paid period (until") }} {{ quote.until }}):
+        <span class="font-semibold text-ink2">{{ quote.rub }}&nbsp;₽{% if is_en() %} (${{ quote.usd }}){% endif %}</span>.
+        {{ t("Дальше — одно продление:", "Then one renewal:") }} {{ quote.renewal }}&nbsp;₽.</p>
+      {% set methods = ([("card", "💳 Card / Apple Pay")] if whop_enabled() else [])
+           + [("crypto", "🪙 Cryptocurrency (USDT)"), ("sbp", "🏦 SBP — Russian bank cards only")]
+           if is_en() else [("sbp", "💳 СБП"), ("crypto", "🪙 Криптовалюта")] %}
+      <div class="w-full flex flex-col gap-2 mt-2">
+        {% for method, label in methods %}
+        {% if method != "crypto" or settings.NOWPAYMENTS_ENABLED %}
+        <a href="/devices/extra?method={{ method }}" data-busy="payment" data-t="extra_{{ method }}"
+           class="w-full text-center text-sm font-semibold rounded-xl py-3 transition-colors
+                  {{ 'bg-white text-black hover:opacity-90' if loop.first else 'border border-line2 text-ink2 hover:border-faint hover:bg-surface2' }}">
+          {{ label }}
+        </a>
+        {% endif %}
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="text-sm text-dim">{{ t("Войдут в оплату подписки:", "Included in your subscription payment:") }} +{{ quote.addon }}&nbsp;₽ ({{ t("всего", "total") }} {{ quote.renewal }}&nbsp;₽).</p>
+      <form method="post" action="/devices/extra/with_subscription" class="w-full mt-2">
+        <button type="submit" class="w-full text-center text-sm font-semibold rounded-xl py-3 bg-white text-black hover:opacity-90 transition-opacity">
+          {{ t("Оплатить подписку с доп. устройствами", "Pay for subscription with extra devices") }}
+        </button>
+      </form>
+    {% endif %}
+  </div>
+  {% endif %}
+
+</section>
+{% endblock %}

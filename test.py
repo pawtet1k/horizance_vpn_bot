@@ -18,6 +18,7 @@ vpn.py поверх временной SQLite базы (test_users.db) и тес
 BotFather и, где это применимо, сравнивает поведение для нового и уже
 знакомого системе пользователя.
 """
+import json
 import os
 import tempfile
 # до импорта проекта: my_logger настраивает файлы при импорте. Без этого
@@ -81,6 +82,7 @@ class FakeEvent:
         self.data = data
         self.reply = AsyncMock()
         self.answer = AsyncMock()
+        self.edit = AsyncMock()
         self.forward_to = AsyncMock()
         self.client = MagicMock()
         self.client.get_entity = AsyncMock(
@@ -151,6 +153,22 @@ class TestUdmPayStatusUnwrapping(unittest.IsolatedAsyncioTestCase):
 # примеру из их доков (HMAC-SHA512 от json.dumps с sort_keys=True)
 # --------------------------------------------------------------------------
 
+class TestUdmPayHealthCheck(unittest.IsolatedAsyncioTestCase):
+    """14.10.26: хост UDM Pay ожил, а наш магазин нет — пинг хоста этого не видел."""
+
+    async def test_account_missing_is_down_other_errors_are_not(self):
+        import httpx
+        missing = udmpay.UdmPayError("No query results for model [App\\Models\\Accounts\\Account].", 404, {})
+        cases = [(None, ""), (missing, "account_missing"),
+                 (udmpay.UdmPayError("Order not found", 404, {}), ""),      # заказа нет, а логин принят — норма
+                 (udmpay.UdmPayError("Server Error", 502, {}), "HTTP 502"),
+                 (httpx.ConnectTimeout(""), "ConnectTimeout")]
+        for exc, expected in cases:
+            with self.subTest(expected=expected), \
+                    patch.object(udmpay, '_post', AsyncMock(side_effect=exc, return_value={"data": {}})):
+                self.assertEqual(await udmpay.health_check("o1"), expected)
+
+
 class TestNowPaymentsSigning(unittest.TestCase):
 
     def test_verify_webhook_signature_matches_official_example(self):
@@ -197,6 +215,13 @@ class BotIntegrationTestCase(unittest.IsolatedAsyncioTestCase):
         main.user_manager.execute_query('DELETE FROM users')
         main.user_manager.execute_query('DELETE FROM trial_sessions')
         main.waiting_for_question.clear()
+
+        # состояние сбоя UDM Pay — не боевое payment_outage.json (14.10.26 тест упал, пока в проде шёл сбой)
+        outage_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(outage_dir.cleanup)
+        outage_patcher = patch.object(settings, 'PAYMENT_OUTAGE_PATH', os.path.join(outage_dir.name, 'outage.json'))
+        outage_patcher.start()
+        self.addCleanup(outage_patcher.stop)
 
         # SSH/xray никогда не должны реально вызываться в тестах
         # мок повторяет поведение настоящего setup_xray: переиспользует уже
@@ -283,6 +308,14 @@ class TestStartCommand(BotIntegrationTestCase):
         updated_referrer = self.get_user(referrer.user_id)
         self.assertEqual(updated_referrer.referrals, 1)
 
+    async def test_start_with_site_label_and_garbage(self):
+        """start=site_<страница> — пришёл с сайта (пригласивший — владелец, как раньше); мусор не роняет /start."""
+        self.create_user(settings.OWNER_TELEGRAM_ID, referrals=0)
+        await main.start(message_event(333334, '/start site_blog_kak-podklyuchit-horizance'))
+        self.assertEqual(self.get_user(333334).referrer_id, settings.OWNER_TELEGRAM_ID)
+        await main.start(message_event(333335, '/start abc'))
+        self.assertIsNone(self.get_user(333335).referrer_id)
+
     async def test_existing_user_sees_subscription_status_not_recreated(self):
         self.create_user(
             444444,
@@ -303,6 +336,77 @@ class TestStartCommand(BotIntegrationTestCase):
         reply_text = event.reply.call_args.args[0]
         self.assertIn('С возвращением', reply_text)
         self.assertIn('Активен', reply_text)
+
+
+class TestHelpQuickAnswers(BotIntegrationTestCase):
+    async def test_help_shows_faq_and_still_waits_for_question(self):
+        self.create_user(777010)
+        event = message_event(777010, '/help')
+        await main.help(event)
+        datas = [row[0].data for row in event.reply.call_args.kwargs['buttons']]
+        self.assertIn(b'faq:devices', datas)
+        self.assertIn(777010, main.waiting_for_question)
+        with patch.object(main.vpn_bot, 'send_message', new=AsyncMock()) as send:
+            await main.help_faq(callback_event(777010, 'faq:devices'))
+        self.assertIn('/devices', send.call_args.args[1])
+        main.waiting_for_question.discard(777010)
+
+
+class TestWebLoginViaBot(BotIntegrationTestCase):
+    """Вход на сайт через бота: /start login_<token> → «Войти?» → сайт заводит сессию (14.10.26)."""
+
+    def _site(self):
+        import sys, types
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'website'))
+        from routers import auth
+        patcher = patch.object(auth, '_db', main.user_manager)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        return auth, types.SimpleNamespace(session={})
+
+    async def _status(self, auth, request):
+        return json.loads((await auth.bot_login_status(request)).body)
+
+    async def test_full_flow_and_one_time_use(self):
+        auth, request = self._site()
+        main.user_manager.add_web_login('tok1', '1.2.3.4', 'Windows, Chrome', 'Москва, Россия')
+        request.session['bot_login'] = 'tok1'
+        self.assertEqual((await self._status(auth, request))['status'], 'pending')
+
+        start = message_event(777001, '/start login_tok1')
+        start.sender.username, start.sender.first_name, start.sender.last_name = 'u1', 'Имя', None
+        await main.start(start)
+        self.assertIn('Windows, Chrome', start.reply.call_args.args[0])
+        self.assertIsNone(self.get_user(777001))  # /start с токеном не заводит пользователя в боте
+        self.assertEqual((await self._status(auth, request))['status'], 'opened')
+
+        stranger = callback_event(777002, 'wl_ok:tok1')  # чужое нажатие не подтверждает
+        await main.web_login_answer(stranger)
+        self.assertEqual((await self._status(auth, request))['status'], 'opened')
+
+        await main.web_login_answer(callback_event(777001, 'wl_ok:tok1'))
+        result = await self._status(auth, request)
+        self.assertEqual(result, {'status': 'ok', 'is_new': True})
+        self.assertEqual(request.session['user_id'], 777001)
+        self.assertEqual(self.get_user(777001).username, 'u1')
+
+        other = __import__('types').SimpleNamespace(session={'bot_login': 'tok1'})
+        self.assertEqual((await self._status(auth, other))['status'], 'expired')  # второй раз не войти
+
+    async def test_expired_and_denied(self):
+        auth, request = self._site()
+        main.user_manager.add_web_login('old', '1.2.3.4', 'Mac, Safari', '')
+        main.user_manager.execute_query("UPDATE web_logins SET created_at = created_at - 1000 WHERE token = 'old'")
+        event = message_event(777003, '/start login_old')
+        await main.start(event)
+        self.assertIn('устарела', event.reply.call_args.args[0])
+
+        main.user_manager.add_web_login('tok2', '1.2.3.4', 'Mac, Safari', '')
+        request.session['bot_login'] = 'tok2'
+        await main.start(message_event(777003, '/start login_tok2'))
+        await main.web_login_answer(callback_event(777003, 'wl_no:tok2'))
+        self.assertEqual((await self._status(auth, request))['status'], 'denied')
+        self.assertNotIn('user_id', request.session)
 
 
 # --------------------------------------------------------------------------
@@ -342,7 +446,11 @@ class TestConfigFlow(BotIntegrationTestCase):
         args, kwargs = main.vpn_bot.send_message.call_args
         sent_text = args[1]
         self.assertIn(user.client_uuid, sent_text)
-        self.assertIn(settings.VPN_CLIENT_DOWNLOAD_URLS['iOS'], sent_text)
+        # iPhone: Happ из российского App Store убран — две ветки: «Happ уже есть» и «скачать INCY + добавить в INCY»
+        self.assertIn(f'/vpn/{user.client_uuid}?app=incy', sent_text)
+        self.assertIn('/go/app/INCY', sent_text)
+        self.assertNotIn('/sub/', sent_text)
+        self.assertNotIn(settings.VPN_CLIENT_DOWNLOAD_URLS['iOS'], sent_text)
 
     async def test_tv_selection_sends_tv_instructions_with_sub_link(self):
         self.create_user(666667, device_os=None)
@@ -749,17 +857,26 @@ class TestUdmPayPaymentFlow(BotIntegrationTestCase):
         # 04.10.26 UDM Pay не ответил за 20 с, и /pay/month падал с 500
         import httpx
         self.create_user(777009, price=99, status=UserStatus.TRIAL)
-        with patch.object(
+        import payment_outage
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(settings, 'PAYMENT_OUTAGE_PATH', os.path.join(tmp, 'outage.json')), patch.object(
             udmpay, 'create_subscription_with_payment',
             AsyncMock(side_effect=httpx.ReadTimeout('timeout'))
         ):
             result = await main.subscription_manager.add_subscription(
                 main.vpn_bot, self.get_user(777009)
             )
+            self.assertEqual(payment_outage.load()['users'], [777009])  # запомнен для рассылки «оплата заработала»
+            # разовый таймаут, сбой не объявлен — «через минуту», без причины сбоя
+            self.assertIn('через минуту', main.vpn_bot.send_message.call_args.args[1])
+
+            payment_outage.save({**payment_outage.load(), "down_since": 1.0})  # node_monitor объявил сбой
+            await main.subscription_manager.add_subscription(main.vpn_bot, self.get_user(777009))
+            outage_text = main.vpn_bot.send_message.call_args.args[1]
+            self.assertIn(settings.PAYMENT_OUTAGE_REASON[0], outage_text)
+            self.assertIn('Telegram-боте', outage_text)
 
         self.assertIsNone(result)
-        sent_text = main.vpn_bot.send_message.call_args.args[1]
-        self.assertIn('не отвечает', sent_text)
         self.assertIsNone(self.get_user(777009).pending_order_uid)
 
     async def test_activate_paid_subscription_extends_and_provisions(self):
@@ -1065,9 +1182,105 @@ class TestNowPaymentsFlow(BotIntegrationTestCase):
 # /invite_friend и /qr_code
 # --------------------------------------------------------------------------
 
+class TestPaymentOutageBroadcast(BotIntegrationTestCase):
+    """Рассылка «оплата заработала» тем, кто пытался оплатить во время сбоя UDM Pay (node_monitor.notify_recovered)."""
+
+    async def test_notify_recovered(self):
+        import payment_outage
+        from node_monitor import NodeMonitor
+        main.user_manager.execute_query('DELETE FROM payment_orders')
+        for uid in (880001, 880002, 880003, 880004, settings.OWNER_TELEGRAM_ID):
+            self.create_user(uid)
+        main.user_manager.record_payment_order("o-unpaid", 880002, "NOWPayments", 99)   # крипта, не оплачен
+        main.user_manager.record_payment_order("o-paid", 880003, "NOWPayments", 99)
+        main.user_manager.mark_payment_order_paid("o-paid")                              # уже оплатил
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(settings, 'PAYMENT_OUTAGE_PATH', os.path.join(tmp, 'outage.json')):
+            payment_outage.note_attempt(880001)       # СБП: UDM Pay не создал заказ
+            payment_outage.note_attempt(880003)       # тоже пытался СБП, но потом оплатил
+            payment_outage.note_attempt(settings.OWNER_TELEGRAM_ID)
+            data = payment_outage.load()
+            data['queued'] = [{'user_id': 880004, 'text': 'одобренный текст'}]   # очередь «когда заработает оплата»
+            payment_outage.save(data)
+            monitor = NodeMonitor(main.vpn_manager, main.user_manager, main.vpn_bot)
+            with patch('node_monitor.send_telegram_api_message', new=AsyncMock(return_value=True)) as send:
+                sent = await monitor.notify_recovered()
+            self.assertEqual(sent, [880001, 880002, 880004])
+            self.assertEqual([c.args[0] for c in send.await_args_list], [880001, 880002, 880004])
+            self.assertEqual(send.await_args_list[2].args[1], 'одобренный текст')
+            self.assertEqual(payment_outage.load()['queued'], [])
+            buttons = send.await_args_list[0].kwargs['buttons']
+            self.assertEqual([b[0]['callback_data'] for b in buttons], ['select_plan_month', 'select_plan_year'])
+            self.assertEqual(payment_outage.load()['users'], [])   # второй раз не пишем
+
+    def test_failed_between(self):
+        """«Перед этим СБП не сработала» в письме о брошенной оплате — только по реальной попытке этого человека."""
+        import payment_outage
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(settings, 'PAYMENT_OUTAGE_PATH', os.path.join(tmp, 'outage.json')):
+            payment_outage.save({"users": [880005], "since": None, "down_since": 1.0})  # в списке, но попытки не было
+            payment_outage.note_attempt(880001)
+            now = __import__("time").time()
+            self.assertTrue(payment_outage.failed_between(880001, now - 60, now + 1))
+            self.assertFalse(payment_outage.failed_between(880001, now + 10, now + 20))
+            self.assertFalse(payment_outage.failed_between(880005, 0, now + 1))
+
+
+class TestExtraDevicesPurchase(BotIntegrationTestCase):
+    """Доп. устройства — опция подписки: доплата за остаток срока, дальше одно продление (settings.EXTRA_DEVICES_*)."""
+
+    def until(self, days):
+        return (datetime.now() + timedelta(days=days)).strftime("%d.%m.%y")
+
+    async def test_mid_period_prorated_charge_then_coterminous(self):
+        self.create_user(880101, status=UserStatus.ACTIVE, paid_periods=1, price=99, next_payment_date=self.until(14))
+        quote = main.subscription_manager.extra_devices_quote(self.get_user(880101))
+        self.assertEqual(quote["mode"], "prorate")
+        self.assertEqual(quote["rub"], 50)                 # ceil(99 * 15/30)
+        self.assertEqual(quote["usd"], settings.EXTRA_DEVICES_MIN_CHARGE_USD)  # $0.9 < минимума провайдера
+        with patch.object(nowpayments, 'create_invoice',
+                          AsyncMock(return_value={"id": 9001, "invoice_url": "https://pay.example/9001"})) as inv:
+            ok = await main.subscription_manager.buy_extra_devices(main.vpn_bot, self.get_user(880101), "crypto")
+        self.assertTrue(ok)
+        self.assertEqual(inv.call_args.kwargs["price_amount"], settings.EXTRA_DEVICES_MIN_CHARGE_USD)
+        self.assertIsNone(self.get_user(880101).pending_order_uid)  # замок оплаты подписки не трогаем
+        self.assertEqual(main.user_manager.get_payment_order("9001")["product"], "extra_devices")
+        # подписочная ссылка за ту же сумму не выдаётся вместо доплаты
+        main.user_manager.execute_query("UPDATE payment_orders SET provider='UDM Pay' WHERE order_id='9001'")
+        self.assertIsNone(main.user_manager.get_recent_unpaid_order(880101, "UDM Pay", 50, 30))
+
+        with patch.object(subscription, 'send_email'):
+            await main.subscription_manager.activate_paid_subscription(main.vpn_bot, 880101, "9001", "NOWPayments")
+        user = self.get_user(880101)
+        self.assertEqual((user.extra_devices, user.extra_devices_until), (1, self.until(14)))  # общий срок
+        self.assertEqual((user.paid_periods, user.next_payment_date), (1, self.until(14)))   # подписка та же
+
+        # продление: один счёт на подписку + опцию, срок — по тарифу, опция продлевается до той же даты
+        with patch.object(nowpayments, 'create_invoice',
+                          AsyncMock(return_value={"id": 9002, "invoice_url": "https://pay.example/9002"})) as inv:
+            await main.subscription_manager.add_crypto_subscription(main.vpn_bot, user)
+        self.assertEqual(inv.call_args.kwargs["price_amount"], 3.6)
+        order = main.user_manager.get_payment_order("9002")
+        self.assertEqual((order["price"], order["base_price"]), (198, 99))
+        with patch.object(subscription, 'send_email'):
+            await main.subscription_manager.activate_paid_subscription(main.vpn_bot, 880101, "9002", "NOWPayments")
+        user = self.get_user(880101)
+        self.assertEqual((user.paid_periods, user.price), (2, 99))
+        self.assertEqual(user.extra_devices_until, user.next_payment_date)
+
+        # отключил — дальше счёт без опции
+        main.subscription_manager.set_extra_devices(user, False)
+        self.assertEqual(main.subscription_manager._order_amounts(self.get_user(880101))[0], 99)
+
+    async def test_trial_gets_option_with_first_payment(self):
+        self.create_user(880102, status=UserStatus.TRIAL, paid_periods=0, price=99)
+        quote = main.subscription_manager.extra_devices_quote(self.get_user(880102))
+        self.assertEqual((quote["mode"], quote["renewal"]), ("with_subscription", 198))
+
+
 class TestReferralAndQrCode(BotIntegrationTestCase):
 
-    async def test_invite_friend_sends_referral_and_trial_links(self):
+    async def test_invite_friend_sends_only_referral_link(self):
         import credentials
 
         self.create_user(222001)
@@ -1078,7 +1291,7 @@ class TestReferralAndQrCode(BotIntegrationTestCase):
         main.vpn_bot.send_message.assert_awaited_once()
         reply_text = main.vpn_bot.send_message.call_args.args[1]
         self.assertIn('t.me/horizance_vpn_bot?start=222001', reply_text)
-        self.assertIn(credentials.TRIAL_LINK, reply_text)
+        self.assertNotIn(credentials.TRIAL_LINK, reply_text)
 
     async def test_qr_code_command_sends_and_cleans_up_file(self):
         self.create_user(222002)
@@ -1298,6 +1511,38 @@ class TestDeviceGuard(unittest.TestCase):
                 (user_id, f"SM-A266B|{hwid}" if hwid else None, str(uuid4()),
                  f"{ip}|('Bavaria', 'Nuremberg')", created, created, 5 if used else None)
             )
+
+    def test_extra_devices_raise_limit_and_removed_device_is_refused(self):
+        # 13.10.26: докупка +3 устройства и /devices (убрать/вернуть)
+        user = {"user_id": 555001, "extra_devices_until": None}
+        for i in range(settings.DEVICE_LIMIT):
+            self.assertIsNone(device_guard.device_refusal(user, f"h{i}", "Phone"))
+        self.assertEqual(device_guard.device_refusal(user, "h_new", "Phone"), "device_limit")
+        user["extra_devices_until"] = (datetime.now() + timedelta(days=1)).strftime("%d.%m.%y")
+        self.assertIsNone(device_guard.device_refusal(user, "h_new", "Phone"))
+        user["extra_devices_until"] = (datetime.now() - timedelta(days=1)).strftime("%d.%m.%y")  # срок кончился
+        self.assertEqual(device_guard.device_refusal(user, "h_more", "Phone"), "device_limit")
+
+        self.assertTrue(device_guard.remove_device(555001, "h0"))
+        self.assertEqual(device_guard.device_refusal(user, "h0", "Phone"), "device_removed")  # убранному — заглушка
+        # слот освободился, но устройств с докупкой было 4 — места всё равно нет, пока не уберут ещё одно
+        self.assertEqual(device_guard.restore_device(user, "h0"), "device_limit")
+        device_guard.remove_device(555001, "h_new")
+        self.assertIsNone(device_guard.device_refusal(user, "h_more", "Phone"))
+        self.assertEqual(device_guard.restore_device(user, "h0"), "device_limit")
+        device_guard.remove_device(555001, "h_more")
+        self.assertIsNone(device_guard.restore_device(user, "h0"))
+        self.assertIsNone(device_guard.device_refusal(user, "h0", "Phone"))
+
+    def test_known_devices_over_limit_refused_after_option_ends(self):
+        user = {"user_id": 555002, "extra_devices_until": (datetime.now() + timedelta(days=1)).strftime("%d.%m.%y")}
+        for i in range(settings.DEVICE_LIMIT + 2):
+            self.assertIsNone(device_guard.device_refusal(user, f"k{i}", "Phone"))
+        user["extra_devices_until"] = (datetime.now() - timedelta(days=1)).strftime("%d.%m.%y")
+        self.assertIsNone(device_guard.device_refusal(user, "k0", "Phone"))           # первые по подключению
+        self.assertEqual(device_guard.device_refusal(user, f"k{settings.DEVICE_LIMIT}", "Phone"), "device_limit")
+        device_guard.remove_device(555002, "k0")                                     # убрал лишнее — работает
+        self.assertIsNone(device_guard.device_refusal(user, f"k{settings.DEVICE_LIMIT}", "Phone"))
 
     def test_ip_limit_counts_last_30_days_from_db(self):
         for i in range(settings.TRIAL_IP_LIMIT):
@@ -1522,10 +1767,28 @@ class TestSubDoesNotWaitForNodes(unittest.IsolatedAsyncioTestCase):
                     "status": "active", "next_payment_date": "01.01.30"}
             started = _time.monotonic()
             headers = await web_vpn.get_headers(user)
-            self.assertLess(_time.monotonic() - started, 1)
+            # ждём сбор не дольше TRAFFIC_WAIT_SEC, дальше отдаём итог из базы
+            self.assertLess(_time.monotonic() - started, web_vpn.TRAFFIC_WAIT_SEC + 1)
             self.assertIn("download=700000000", headers["subscription-userinfo"])
             for task in list(web_vpn._traffic_tasks):
                 task.cancel()
+
+    async def test_headers_use_fresh_traffic_when_nodes_answer_fast(self):
+        # 10.10.26: новичок видел «0 b», потому что в ответ шёл итог до сбора
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'website'))
+        from routers import vpn as web_vpn
+
+        async def fast_traffic(user_id, reset=False):
+            return {"uplink": 3000000, "downlink": 20000000}
+
+        with patch.object(web_vpn, 'get_user_traffic', side_effect=fast_traffic), \
+                patch.object(web_vpn, 'save_traffic'), \
+                patch.object(web_vpn, '_db_traffic_mb', return_value={"uplink": 3, "downlink": 20}):
+            user = {"user_id": 43, "traffic_in": 0, "traffic_out": 0,
+                    "status": "trial", "next_payment_date": "01.01.30"}
+            headers = await web_vpn.get_headers(user)
+            self.assertIn("download=20000000", headers["subscription-userinfo"])
 
 
     async def test_parallel_traffic_collections_are_capped(self):
@@ -1567,7 +1830,7 @@ class TestSubDoesNotWaitForNodes(unittest.IsolatedAsyncioTestCase):
             resp = await web_vpn.get_client_config("uuid", request)
         body = resp.body.decode()
         self.assertIn("horizancevpn.com/pay", body)
-        self.assertEqual(resp.headers["profile-web-page-url"], "https://horizancevpn.com/pay")
+        self.assertEqual(resp.headers["profile-web-page-url"], "https://horizancevpn.com/go/pay?src=happ_trial_over")
         announce = b64.b64decode(resp.headers["announce"].split(":", 1)[1]).decode()
         self.assertIn("/pay", announce)
 
@@ -1611,3 +1874,32 @@ class TestLegacyHostDetection(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestEnglishForForeigners(unittest.TestCase):
+    """10.10.26: иностранцы (Shailesh и др.) получали всё по-русски и уходили, не оплатив."""
+
+    def _u(self, **kw):
+        from types import SimpleNamespace
+        base = dict(language=None, first_name=None, last_name=None, client_ip=None)
+        base.update(kw)
+        return SimpleNamespace(**base)
+
+    def test_rules(self):
+        import i18n
+        with patch.object(i18n, '_country', side_effect=lambda ip: {'1.1.1.1': 'DE', '5.5.5.5': 'RU'}.get(ip)):
+            self.assertFalse(i18n.is_english(self._u(language='ru', first_name='John')))
+            self.assertFalse(i18n.is_english(self._u(language=None, first_name='John')))
+            self.assertFalse(i18n.is_english(self._u(language='en', first_name='Иван')))
+            self.assertFalse(i18n.is_english(self._u(language='uk', first_name='Taras')))
+            self.assertTrue(i18n.is_english(self._u(language='en', first_name='Shailesh')))
+            self.assertTrue(i18n.is_english(self._u(language='zh-hans', first_name='武当山')))
+            self.assertTrue(i18n.is_english(self._u(language='tr', first_name='Muhammed', client_ip="1.1.1.1|('x', 'y')")))
+            self.assertFalse(i18n.is_english(self._u(language='en', first_name='Ivan', client_ip="5.5.5.5|('Moscow', 'Moscow')")))
+
+    def test_payment_methods_put_crypto_first_for_english(self):
+        import bot as bot_module
+        labels = [row[0].text for row in bot_module.payment_method_buttons(english=True)]
+        self.assertTrue(any('Cryptocurrency' in l for l in labels[:2]))
+        self.assertIn('Russian bank', labels[-1])
+        self.assertIn('СБП', bot_module.payment_method_buttons()[0][0].text)

@@ -4,7 +4,8 @@
    AUTH.HTML (бывший login.html — страница обслуживает и вход, и
    первую регистрацию через один и тот же Telegram-виджет)
 
-   1) Telegram — единственный полностью рабочий способ входа. Кастомная
+   0) Вход через бота (QR / кнопка) — основной способ с 14.10.26, см. блок bot-login ниже.
+   1) Telegram-виджет — запасной способ (вход по номеру телефона). Кастомная
       кнопка вместо авто-рендерящегося iframe-виджета. Клик вызывает
       Telegram.Login.auth() из telegram-widget.js — Telegram сам подписывает
       данные пользователя и отдаёт их в JS callback; мы POST'им их на
@@ -20,13 +21,13 @@
       показывает модалку "скоро будет" (см. base.html: showComingSoonModal).
    ═══════════════════════════════════════════════════════════════ #}
 
-{% block title %}Вход — Horizance VPN{% endblock %}
+{% block title %}{{ t('Вход', 'Sign in') }} — Horizance VPN{% endblock %}
 {% block meta_description %}Войдите в личный кабинет Horizance VPN через Яндекс ID — без отдельного пароля.{% endblock %}
 {% block canonical %}https://horizancevpn.com/auth{% endblock %}
 
 {% block header_cta %}
 <a href="/" class="text-sm font-semibold text-ink2 border border-line2 rounded-xl px-4 py-2 hover:border-faint hover:bg-surface2 transition-colors">
-  На главную
+  {{ t('На главную', 'Home') }}
 </a>
 {% endblock %}
 
@@ -37,29 +38,124 @@
     <!-- логотип Horizance VPN (тот же значок, что и в шапке) -->
     <img src="{{ static_v('/static/img/icon-192x192.png') }}" alt="Horizance VPN" class="w-16 h-16 rounded-xl mx-auto mb-6"/>
 
-    <h1 class="text-2xl font-semibold tracking-tight mb-2">Вход в личный кабинет</h1>
+    <h1 class="text-2xl font-semibold tracking-tight mb-2">{{ t('Вход в личный кабинет', 'Sign in to your account') }}</h1>
     <p class="text-dim text-sm mb-8 leading-relaxed">
-      Отдельная регистрация не нужна — аккаунт создаётся
-      автоматически при первом входе.
+      {{ t('Отдельная регистрация не нужна — аккаунт создаётся автоматически при первом входе.', 'No separate sign-up needed — your account is created automatically on first sign-in.') }}
     </p>
 
-    <!-- ═══ Кнопка входа через Telegram ═══
-         Кастомная кнопка вместо авто-рендерящегося iframe-виджета —
-         так её размер и ширина совпадают с остальными кнопками ниже.
+    <!-- ═══ Вход через бота (14.10.26): QR на компьютере, кнопка на телефоне ═══
+         Страница берёт одноразовый токен (POST /api/auth/bot/new, routers/auth.py), показывает QR со ссылкой
+         t.me/<бот>?start=login_<token> (на телефоне — кнопку с той же ссылкой) и раз в 2 с спрашивает
+         /api/auth/bot/status. Бот спрашивает «Войти на сайт?», после «Войти» вкладка входит сама.
+         Зачем: виджет Telegram просит номер телефона на сайте — с компьютера по нему теряли 4 из 6 человек. -->
+    <div id="bot-login" class="mb-4">
+      <div id="bot-login-qr" class="hidden">
+        <div class="bg-white rounded-xl p-3 w-52 h-52 mx-auto">
+          <img id="bot-login-qr-img" alt="{{ t('QR-код для входа через Telegram', 'QR code to sign in with Telegram') }}" class="w-full h-full"/>
+        </div>
+        <p class="text-sm text-dim mt-4 leading-relaxed">
+          {{ t('Наведите камеру телефона на QR-код и нажмите «Войти» в нашем Telegram-боте.', 'Point your phone camera at the QR code and tap “Sign in” in our Telegram bot.') }}
+        </p>
+        <p class="text-xs text-faint mt-2">
+          {{ t('Telegram есть на этом компьютере?', 'Telegram on this computer?') }}
+          <a id="bot-login-desktop-link" href="#" class="underline hover:text-dim">{{ t('Открыть бота', 'Open the bot') }}</a>
+        </p>
+      </div>
+      <div id="bot-login-mobile" class="hidden">
+        <a id="bot-login-btn" href="#"
+           class="flex items-center justify-center gap-3 w-full h-16 text-base bg-[#229ED9] text-white font-semibold rounded-xl
+                  shadow-lg shadow-[#229ED9]/25 ring-1 ring-white/10
+                  transition-all duration-150 hover:opacity-90 hover:shadow-xl hover:shadow-[#229ED9]/30">
+          <i class="fa-brands fa-telegram text-2xl" aria-hidden="true"></i>
+          {{ t('Войти через Telegram', 'Sign in with Telegram') }}
+        </a>
+        <p class="text-xs text-faint mt-3 leading-relaxed">
+          {{ t('Бот попросит подтвердить вход. Нажмите «Войти» и вернитесь на эту страницу.', 'The bot will ask you to confirm. Tap “Sign in” and come back to this page.') }}
+        </p>
+      </div>
+      <p id="bot-login-status" class="text-sm text-ink2 mt-3 min-h-[1.25rem]" aria-live="polite"></p>
+    </div>
+    <script>
+      (function () {
+        var mobile = /iPhone|iPad|iPod|Android/.test(navigator.userAgent || '');
+        var nextUrl = {{ next_url | default('/dashboard') | tojson }};
+        var status = document.getElementById('bot-login-status');
+        var img = document.getElementById('bot-login-qr-img');
+        var refreshes = 0, timer = null, busy = false;
+        var MAX_REFRESHES = 5; // ~15 минут на открытой вкладке, дальше — по кнопке
+        var TEXT = {
+          opened: {{ t('Подтвердите вход в Telegram-боте…', 'Confirm the sign-in in the Telegram bot…') | tojson }},
+          denied: {{ t('Вход отклонён в боте. Мы показали новый код.', 'Sign-in was declined in the bot. Here is a new code.') | tojson }},
+          ok: {{ t('Вход выполнен, открываем кабинет…', 'Signed in, opening your account…') | tojson }},
+          stale: {{ t('Код устарел — нажмите, чтобы показать новый', 'The code has expired — tap to get a new one') | tojson }},
+          error: {{ t('Не удалось получить код. Обновите страницу.', 'Could not get a code. Please reload the page.') | tojson }}
+        };
+        document.getElementById(mobile ? 'bot-login-mobile' : 'bot-login-qr').classList.remove('hidden');
+
+        function setStatus(text, clickable) {
+          status.textContent = text;
+          status.classList.toggle('underline', !!clickable);
+          status.classList.toggle('cursor-pointer', !!clickable);
+          status.onclick = clickable ? function () { refreshes = 0; fresh(''); } : null;
+        }
+        function fresh(note) {
+          if (refreshes >= MAX_REFRESHES) { clearInterval(timer); timer = null; setStatus(TEXT.stale, true); return; }
+          refreshes += 1;
+          fetch('/api/auth/bot/new', { method: 'POST', credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (j) {
+              if (!j.ok) throw new Error('new');
+              document.getElementById('bot-login-btn').href = j.link;
+              document.getElementById('bot-login-desktop-link').href = j.link;
+              img.src = '/api/auth/bot/qr.svg?n=' + Date.now();
+              setStatus(note || '', false);
+              if (!timer) timer = setInterval(poll, 2000);
+            })
+            .catch(function () { setStatus(TEXT.error, false); });
+        }
+        function poll() {
+          if (busy || document.hidden) return;
+          busy = true;
+          fetch('/api/auth/bot/status', { credentials: 'same-origin', cache: 'no-store' })
+            .then(function (r) { return r.json(); })
+            .then(function (j) {
+              if (j.status === 'ok') {
+                clearInterval(timer);
+                setStatus(TEXT.ok, false);
+                var event = j.is_new ? 'signup' : 'login';
+                if (window.ym) ym({{ settings.YANDEX_METRIKA_COUNTER_ID }}, 'reachGoal', event, {method: 'bot'});
+                if (window.gtag) gtag('event', event, {method: 'bot'});
+                if (window.clarity) clarity('event', event);
+                window.location.href = nextUrl;
+              } else if (j.status === 'opened') {
+                setStatus(TEXT.opened, false);
+              } else if (j.status === 'denied') {
+                fresh(TEXT.denied);
+              } else if (j.status === 'expired') {
+                fresh('');
+              }
+            })
+            .catch(function () {})
+            .then(function () { busy = false; });
+        }
+        // вернулись из Telegram на телефоне — проверить сразу, не ждать таймера
+        document.addEventListener('visibilitychange', function () { if (!document.hidden && timer) poll(); });
+        fresh('');
+      })();
+    </script>
+
+    <!-- ═══ Запасной вариант: виджет Telegram (вход по номеру телефона) ═══
+         Кастомная кнопка вместо авто-рендерящегося iframe-виджета.
          Telegram.Login.auth(bot_id, request_access) открывает поповер
          Telegram и отдаёт подписанные данные пользователя в callback;
-         мы сами отправляем их POST'ом на /api/auth/telegram/callback
-         (routers/auth.py — та же проверка hash, что и раньше, только
-         теперь по телу запроса, а не по query-параметрам редиректа).
+         мы сами отправляем их POST'ом на /api/auth/telegram/callback.
          Домен сайта должен быть привязан к боту через
          @BotFather → /setdomain, иначе Telegram откажет с "Bot domain invalid". -->
     <script src="https://telegram.org/js/telegram-widget.js?22"></script>
     <button type="button" id="tg-login"
-            class="flex items-center justify-center gap-3 w-full h-16 text-base bg-[#229ED9] text-white font-semibold rounded-xl
-                   shadow-lg shadow-[#229ED9]/25 ring-1 ring-white/10
-                   transition-all duration-150 hover:opacity-90 hover:shadow-xl hover:shadow-[#229ED9]/30">
-      <i class="fa-brands fa-telegram text-2xl" aria-hidden="true"></i>
-      Войти через Telegram
+            class="flex items-center justify-center gap-2.5 w-full h-11 text-sm bg-surface2 border border-line2 text-ink2 font-medium rounded-lg transition-colors hover:border-faint">
+      <i class="fa-brands fa-telegram text-base text-[#229ED9]" aria-hidden="true"></i>
+      {{ t('Войти по номеру телефона', 'Sign in by phone number') }}
     </button>
 
     <!-- ═══ Ссылка "нет приложения" ═══
@@ -72,9 +168,9 @@
          поставить приложение - только ссылка в стор, установка - руками
          пользователя. -->
     <p id="tg-install-hint" class="text-xs text-faint mt-3">
-      Нет Telegram на этом устройстве?
+      {{ t('Нет Telegram на этом устройстве?', 'No Telegram on this device?') }}
       <a id="tg-install-link" href="{{ settings.TELEGRAM_APP_URLS['Windows'] }}" target="_blank" rel="noopener"
-         class="underline hover:text-dim">Установить</a>
+         class="underline hover:text-dim">{{ t('Установить', 'Install') }}</a>
     </p>
     <script>
       (function () {
@@ -123,7 +219,7 @@
     <!-- Разделитель -->
     <div class="flex items-center gap-3 my-6">
       <div class="flex-1 h-px bg-line"></div>
-      <span class="text-xs text-faint">другие способы</span>
+      <span class="text-xs text-faint">{{ t('другие способы', 'other options') }}</span>
       <div class="flex-1 h-px bg-line"></div>
     </div>
 
@@ -141,7 +237,7 @@
       <button type="button" onclick="handleAuthStubClick('yandex', 'Яндекс ID')"
               class="flex items-center justify-center gap-2.5 w-full h-11 text-sm bg-surface2 border border-line2 text-dim font-medium rounded-lg transition-colors hover:border-faint hover:text-ink2">
         <i class="fa-brands fa-yandex-international text-base text-[#FC3F1D]" aria-hidden="true"></i>
-        Войти с Яндекс ID
+        {{ t('Войти с Яндекс ID', 'Sign in with Yandex ID') }}
       </button>
 
       <button type="button" onclick="handleAuthStubClick('google', 'Google')"
@@ -155,19 +251,19 @@
           <path fill="#FBBC05" d="M11.69 28.18C11.25 26.86 11 25.45 11 24s.25-2.86.69-4.18v-5.7H4.34C2.85 17.09 2 20.45 2 24s.85 6.91 2.34 9.88l7.35-5.7z"/>
           <path fill="#EA4335" d="M24 10.75c3.23 0 6.13 1.11 8.41 3.29l6.31-6.31C34.91 4.18 29.93 2 24 2 15.4 2 7.96 6.93 4.34 14.12l7.35 5.7c1.73-5.2 6.58-9.07 12.31-9.07z"/>
         </svg>
-        Войти через Google
+        {{ t('Войти через Google', 'Sign in with Google') }}
       </button>
 
       <button type="button" onclick="handleAuthStubClick('vk', 'VK ID')"
               class="flex items-center justify-center gap-2.5 w-full h-11 text-sm bg-surface2 border border-line2 text-dim font-medium rounded-lg transition-colors hover:border-faint hover:text-ink2">
         <i class="fa-brands fa-vk text-base text-[#0077FF]" aria-hidden="true"></i>
-        Войти через VK ID
+        {{ t('Войти через VK ID', 'Sign in with VK ID') }}
       </button>
 
       <button type="button" onclick="handleAuthStubClick('password', 'логин и пароль')"
               class="flex items-center justify-center gap-2.5 w-full h-11 text-sm bg-surface2 border border-line2 text-dim font-medium rounded-lg transition-colors hover:border-faint hover:text-ink2">
         <i class="fa-solid fa-key text-base text-dim" aria-hidden="true"></i>
-        Войти по логину и паролю
+        {{ t('Войти по логину и паролю', 'Sign in with login and password') }}
       </button>
     </div>
     <script>
@@ -181,7 +277,7 @@
     </script>
 
     <p class="text-xs text-faint mt-6 leading-relaxed">
-      Продолжая, вы соглашаетесь с условиями использования сервиса.
+      {{ t('Продолжая, вы соглашаетесь с условиями использования сервиса.', 'By continuing, you agree to the terms of service.') }}
     </p>
   </div>
 </section>

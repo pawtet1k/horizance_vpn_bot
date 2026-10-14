@@ -1,5 +1,8 @@
+import re
 import sys
 from pathlib import Path
+
+import httpx
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # horizance_vpn_bot root
 
 from fastapi import FastAPI, Request
@@ -12,6 +15,7 @@ from telemetry import make_router as make_telemetry_router
 import credentials
 from error_alerts import notify_error
 from my_logger import logger
+from request_helpers import get_client_ip
 
 app = FastAPI()
 app.add_middleware(
@@ -21,6 +25,43 @@ app.add_middleware(
     same_site="lax",
     https_only=True,
 )
+
+
+_BOT_UA = re.compile(r"bot|crawl|spider|slurp|yandex|google|bing|lighthouse|preview", re.I)
+_RU_LANGS = {"ru", "uk", "be", "kk"}
+_country_cache: dict[str, str | None] = {}
+
+
+async def _ip_country(ip: str) -> str | None:
+    if ip not in _country_cache:
+        try:
+            async with httpx.AsyncClient(timeout=1.5) as client:
+                r = await client.get(f"http://ip-api.com/json/{ip}?fields=countryCode")
+            _country_cache[ip] = r.json().get("countryCode")
+        except Exception:
+            return None
+    return _country_cache[ip]
+
+
+@app.middleware("http")
+async def site_language(request: Request, call_next):
+    """request.state.en — показывать ли страницу по-английски (templates_env.t). Правило как у бота (i18n.py):
+    язык браузера не русский и IP не российский. ?lang=en|ru переключает вручную и запоминается в cookie."""
+    request.state.en = False
+    forced = request.query_params.get("lang") or request.cookies.get("hz_lang")
+    path = request.url.path
+    if forced in ("en", "ru"):
+        request.state.en = forced == "en"
+    elif (request.method == "GET" and not path.startswith(("/static", "/api/payments", "/api/t", "/go"))
+          and not _BOT_UA.search(request.headers.get("user-agent", ""))):
+        accept = request.headers.get("accept-language", "")
+        primary = accept.split(",")[0].split(";")[0].strip().lower().split("-")[0]
+        if primary and primary not in _RU_LANGS:
+            request.state.en = (await _ip_country(get_client_ip(request))) != "RU"
+    response = await call_next(request)
+    if request.query_params.get("lang") in ("en", "ru"):
+        response.set_cookie("hz_lang", request.query_params["lang"], max_age=365 * 86400, samesite="lax", secure=True)
+    return response
 
 
 @app.middleware("http")

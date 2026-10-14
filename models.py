@@ -32,6 +32,15 @@ class UserStatus(str, Enum):
             UserStatus.FREE: "🎁 Бесплатный",
         }[self]
 
+    def label_en(self) -> str:
+        return {
+            UserStatus.ACTIVE: "🟢 Active",
+            UserStatus.INACTIVE: "🔴 Inactive",
+            UserStatus.TRIAL: "🟡 Trial",
+            UserStatus.CANCELED: "🟡 Cancelled",
+            UserStatus.FREE: "🎁 Free",
+        }[self]
+
 def _subscription_defaults() -> dict:
     """Общие поля VPN-подписки, одинаковые для User и WebUser."""
     return {
@@ -61,7 +70,11 @@ def _subscription_defaults() -> dict:
         # роутер: трафик (МБ, in+out) и дата (ISO) начала текущего окна лимита — см. settings.ROUTER_DEVICE
         'traffic_period_start': None,
         'traffic_period_date': None,
-        'notifications': None
+        'notifications': None,
+        # докупленные устройства действуют по эту дату включительно (dd.mm.yy) — см. settings.EXTRA_DEVICES_*
+        'extra_devices_until': None,
+        # 1 — опция «доп. устройства» подключена и продлевается вместе с подпиской (settings.EXTRA_DEVICES_*)
+        'extra_devices': 0,
     }
 
 

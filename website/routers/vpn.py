@@ -2,7 +2,7 @@ from fastapi import APIRouter, Request, Depends
 from fastapi.responses import RedirectResponse, PlainTextResponse
 import asyncio
 import base64
-from datetime import date, datetime
+from datetime import datetime
 import httpx
 import json
 from pathlib import Path
@@ -28,7 +28,7 @@ routing_deeplink = None
 routing_deeplink_fetch_time: float = 0.0
 TITLE_MAIN = base64.b64encode("Horizance VPN".encode()).decode()
 TITLE_TRIAL = base64.b64encode("Horizance VPN Trial".encode()).decode()
-BOT_LINK = "https://t.me/Horizance_vpn_bot?start=183640993"
+BOT_LINK = settings.site_bot_link("happ_support")
 
 # Подписки-заглушки. Happ рисует #-фрагмент vless-ссылки как имя «сервера»
 # в списке и обрезает его после STUB_NAME_MAX_LEN символов, поэтому текст
@@ -64,7 +64,7 @@ TRIAL_OVER_CONTENT = _stub_content(
 )
 # Строки заглушки в Happ не кликабельны, поэтому истёкшему триалу ещё и
 # меняем заголовки: кнопка «веб-страница» профиля и баннер ведут на оплату.
-TRIAL_OVER_PAY_URL = f"https://{credentials.SUBSCRIPTION_DOMAIN}/pay"
+TRIAL_OVER_PAY_URL = f"https://{credentials.SUBSCRIPTION_DOMAIN}/go/pay?src=happ_trial_over"  # бот, иначе /pay (go.py)
 TRIAL_OVER_ANNOUNCE = (
     f"Пробный период закончился. Подписка от {settings.default_price} ₽ в месяц — "
     f"{credentials.SUBSCRIPTION_DOMAIN}/pay или в боте @Horizance_vpn_bot"
@@ -73,10 +73,16 @@ TRIAL_OVER_ANNOUNCE = (
 # Что отдаём устройству, которому device_guard отказал. Ключей в ответе нет —
 # в этом и смысл: голый vless-ключ дальше не контролируется никак.
 DEVICE_REFUSAL_CONTENT = {
+    # лимит у каждого свой (докупка +3, settings.EXTRA_DEVICES_*), поэтому без числа
     "device_limit": _stub_content(
-        f"Лимит: {settings.DEVICE_LIMIT} устройства",
-        "Нужно больше? Напишите",
-        "в поддержку в нашем ТГ-боте",
+        "Лимит устройств исчерпан",
+        "Докупить или заменить:",
+        "/devices в нашем ТГ-боте",
+    ),
+    "device_removed": _stub_content(
+        "Устройство отключено",
+        "владельцем подписки",
+        "Вернуть: /devices в ТГ-боте",
     ),
     "trial_reuse": _stub_content(
         "Пробный период на этом",
@@ -85,6 +91,54 @@ DEVICE_REFUSAL_CONTENT = {
     ),
     "banned": _stub_content("Доступ заблокирован"),
 }
+
+# Те же заглушки по-английски — иностранцу (i18n.is_english / request.state.en), 11.10.26. Лимит Happ — 28 символов.
+EN_STALE_SUBSCRIPTION_CONTENT = _stub_content(
+    "This subscription is old!",
+    "Delete it and get a new",
+    "one in our Telegram bot",
+)
+EN_INACTIVE_SUBSCRIPTION_CONTENT = _stub_content(
+    "Subscription has ended",
+    "Renew it in our Telegram bot",
+)
+EN_TRIAL_OVER_CONTENT = _stub_content(
+    "Free trial has ended",
+    "Pay: horizancevpn.com/pay",
+    "or in Telegram:",
+    "@horizance_vpn_bot",
+)
+EN_TRIAL_OVER_ANNOUNCE = (
+    f"Your free trial has ended. Subscription from ${settings.CRYPTO_PRICE_USD[settings.default_price]} per month — "
+    f"{credentials.SUBSCRIPTION_DOMAIN}/pay or the bot @Horizance_vpn_bot"
+)
+EN_DEVICE_REFUSAL_CONTENT = {
+    "device_limit": _stub_content(
+        "Device limit reached",
+        "Add more or swap one:",
+        "/devices in our Telegram bot",
+    ),
+    "device_removed": _stub_content(
+        "Device removed by owner",
+        "Restore: /devices in bot",
+    ),
+    "trial_reuse": _stub_content(
+        "This device already",
+        "had a free trial",
+        "Subscribe in Telegram bot",
+    ),
+    "banned": _stub_content("Access blocked"),
+}
+
+
+def _sub_is_english(user: dict | None, request: Request) -> bool:
+    """Язык заглушек и баннера в Happ: у пользователя бота — по его профилю (как в боте), у триала сайта
+    и неизвестной ссылки профиля нет — по запросу (request.state.en, app.site_language)."""
+    if user is not None and "language" in user:
+        from types import SimpleNamespace
+        from i18n import is_english
+        return is_english(SimpleNamespace(**user))
+    return bool(getattr(request.state, "en", False))
 
 
 class RoutingCache:
@@ -173,9 +227,10 @@ def log_unknown_uuid(client_uuid: str, request: Request) -> None:
     # нет, поэтому шлём письмо явно — не чаще раза в сутки на один uuid,
     # иначе брошенный клиент с почасовым опросом завалит почту
     notify(
-        key=f"unknown_uuid:{client_uuid}:{date.today()}",
+        key=f"unknown_uuid:{client_uuid}",
         subject="Horizance VPN: обращение по устаревшей ссылке-подписке",
         body=details,
+        cooldown=24 * 3600,
     )
 
 
@@ -383,6 +438,19 @@ def get_settings_link(client_uuid: str) -> str:
             f"#horizance_vpn_{server.get('name','')}{server.get('flag','')}"
         )
         vless_links.append(vless_link)
+    if client_uuid in settings.XHTTP_TEST_UUIDS:
+        vless_links.insert(0,
+            f"vless://{client_uuid}@{settings.XHTTP_TEST_HOST}:8443?"
+            f"security=reality&encryption=none&type=xhttp&path=%2Fapi%2Fv3%2Fmessages&mode=stream-one&"
+            f"sid={credentials.XRAY_SHORTID}&fp=chrome&pbk={credentials.SERVER_PUBLIC_KEY}&"
+            f"sni={credentials.SNI}#horizance_vpn_NL_xhttp")
+        # packet-up: загрузка короткими отдельными запросами (инбаунд vless_xhttp_pu, NL:2096, добавлен через adi
+        # 11.10.26 — НЕ переживает рестарт xray). У Kosta на мобильном МТС длинная загрузка рвётся на всех транспортах.
+        vless_links.insert(0,
+            f"vless://{client_uuid}@{settings.XHTTP_TEST_HOST}:2096?"
+            f"security=reality&encryption=none&type=xhttp&path=%2Fapi%2Fv3%2Fupload&mode=packet-up&"
+            f"sid={credentials.XRAY_SHORTID}&fp=chrome&pbk={credentials.SERVER_PUBLIC_KEY}&"
+            f"sni={credentials.SNI}#horizance_vpn_NL_xhttp2")
     return "\n".join(vless_links)
 
 async def get_user_traffic(user_id, reset: bool = False) -> dict:
@@ -466,22 +534,41 @@ async def _collect_traffic(user_id: str) -> None:
         _traffic_in_flight.discard(user_id)
 
 
-def _schedule_traffic_collection(user_id: str) -> None:
+def _schedule_traffic_collection(user_id: str) -> asyncio.Task | None:
     if user_id in _traffic_in_flight:
-        return
+        return None
     _traffic_in_flight.add(user_id)
     task = asyncio.create_task(_collect_traffic(user_id))
     _traffic_tasks.add(task)
     task.add_done_callback(_traffic_tasks.discard)
+    return task
 
 
-async def get_headers(user, bot_link=BOT_LINK) -> dict:
+# Счётчик в заголовке подписки отставал на целый опрос: в ответ шёл итог из базы ДО сбора, и новичок видел
+# «0 b», хотя VPN уже работал (Kosta_Kibardin, 10.10.26). Ждём сбор, но недолго: дольше — см. 23.09 выше.
+TRAFFIC_WAIT_SEC = 2.5
+
+
+def _db_traffic_mb(user_id: str) -> dict | None:
+    table = "trial_sessions" if user_id.startswith("t_") else "users"
+    with sqlite3.connect(BOT_DB_PATH) as conn:
+        row = conn.execute(
+            f"SELECT traffic_in, traffic_out FROM {table} WHERE user_id = ?", (user_id,)
+        ).fetchone()
+    return {"uplink": row[0] or 0, "downlink": row[1] or 0} if row else None
+
+
+async def get_headers(user, bot_link=BOT_LINK, en: bool = False) -> dict:
     user_id = str(user["user_id"])
     totals_mb = {
         "uplink": user.get("traffic_in") or 0,
         "downlink": user.get("traffic_out") or 0,
     }
-    _schedule_traffic_collection(user_id)
+    task = _schedule_traffic_collection(user_id)
+    if task is not None:
+        done, _ = await asyncio.wait({task}, timeout=TRAFFIC_WAIT_SEC)  # не отменяет: сбор доедет в фоне
+        if task in done:
+            totals_mb = _db_traffic_mb(user_id) or totals_mb
     expire_date = get_expire_date(user)
     title = TITLE_TRIAL if user_id.startswith("t_") else TITLE_MAIN
     # Баннер над списком серверов в приложении. Его видят ТОЛЬКО те, у кого
@@ -489,11 +576,13 @@ async def get_headers(user, bot_link=BOT_LINK) -> dict:
     # App Store здесь бессмысленны по определению: кому они нужны, тот этот
     # текст никогда не увидит. Поэтому тут то, что полезно любому и не
     # протухает от смены сезона.
-    announce = "Продление и помощь — в боте @Horizance_vpn_bot"
+    announce = ("Renewal and help — in the bot @Horizance_vpn_bot" if en
+                else "Продление и помощь — в боте @Horizance_vpn_bot")
     if user_id.startswith("t_"):
         # 01.10.26: 24 из 33 платящих пришли через триал на сайте — баннер
         # триала зовёт в бота, где ещё 14 дней бесплатно
-        announce = f"Понравилось? Ещё {settings.trial_days} дней бесплатно в боте @Horizance_vpn_bot"
+        announce = (f"Enjoying it? {settings.trial_days} more days free in the bot @Horizance_vpn_bot" if en
+                    else f"Понравилось? Ещё {settings.trial_days} дней бесплатно в боте @Horizance_vpn_bot")
 
     return {
         "profile-title": f"base64:{title}",
@@ -572,7 +661,7 @@ tags=["users"], # Для документации (Swagger UI)
 routing_cache = RoutingCache()
 
 @router.get("/vpn/{client_uuid}")
-async def get_happ_link(request: Request, client_uuid: str):
+async def get_happ_link(request: Request, client_uuid: str, app: str = "happ"):
     """Отдаёт страницу, которая сама пытается открыть Happ по зашифрованной
     ссылке, а если за пару секунд ничего не произошло (приложение не
     установлено) — показывает фолбэк со ссылкой на скачивание.
@@ -607,8 +696,15 @@ async def get_happ_link(request: Request, client_uuid: str):
             from incy_crypto_link import encrypt_link
             client_add_urls[client["name"]] = encrypt_link(sub_url, name="Horizance VPN")
 
+    # ?app=incy — бот на iPhone даёт отдельную ссылку «Добавить подписку в INCY»: Happ убран из российского
+    # App Store, а incy://-диплинк Telegram в сообщение не пропускает, поэтому открываем его отсюда
+    app_name, open_url = "Happ", happ_url
+    if app.lower() == "incy" and client_add_urls.get("INCY"):
+        app_name, open_url = "INCY", client_add_urls["INCY"]
+        store_url = app_link("INCY", "vpn_page")
     return templates.TemplateResponse(request, "open_happ.html", {
-        "happ_url": happ_url,
+        "app_name": app_name,
+        "open_url": open_url,
         "store_url": store_url,
         "sub_url": sub_url,
         "is_ios": is_ios,
@@ -626,8 +722,13 @@ async def get_client_config (
     # VPN): профиль маршрутизации не отдаём и выключаем его в Happ. В Happ
     # routing-enable глобальный, поэтому это для личного устройства владельца.
     no_routing = request.query_params.get("routing") == "off"
+    # INCY: тот же профиль маршрутизации, что у Happ (российское — напрямую, мимо наших нод), своя схема ссылки
+    incy_routing = request.headers.get("user-agent", "").startswith("INCY/") and (
+        settings.INCY_ROUTING_ENABLED or request.query_params.get("incy_routing") == "1")
     content = (get_settings_link(client_uuid) if no_routing
-               else await get_content(client_uuid, is_happ))
+               else await get_content(client_uuid, is_happ or incy_routing))
+    if incy_routing and content.startswith(ROUTING_DEEPLINK_PREFIX):
+        content = "incy://routing/onadd/" + content[len(ROUTING_DEEPLINK_PREFIX):]
     meta = (
         "#providerid: 73VflCto\n"
         "#subscription-ping-onopen-enabled: 1\n"
@@ -648,29 +749,32 @@ async def get_client_config (
     # UnboundLocalError и Happ получал 500 вместо внятного ответа.
     headers: dict = {}
     refusal = None
+    en = False
     user = get_user_by_uuid('users', client_uuid)
     if user:
         logger.debug(f"Найден uuid, user: {dict(user)}")
+        en = _sub_is_english(dict(user), request)
         refusal = await update_device_binding('users', user, request)
-        headers = await get_headers(user)
+        headers = await get_headers(user, en=en)
         if is_user_inactive(user):
-            content = INACTIVE_SUBSCRIPTION_CONTENT
+            content = EN_INACTIVE_SUBSCRIPTION_CONTENT if en else INACTIVE_SUBSCRIPTION_CONTENT
     else:
         trial_user = get_user_by_uuid('trial_sessions', client_uuid)
+        en = _sub_is_english(None, request)
         if trial_user:
             logger.debug(f"Trial uuid найден, trial user: {dict(trial_user)}")
             refusal = await update_device_binding('trial_sessions', trial_user, request)
-            headers = await get_headers(trial_user)
+            headers = await get_headers(trial_user, en=en)
             if is_user_inactive(trial_user):
-                content = TRIAL_OVER_CONTENT
+                content = EN_TRIAL_OVER_CONTENT if en else TRIAL_OVER_CONTENT
                 headers["profile-web-page-url"] = TRIAL_OVER_PAY_URL
                 headers["announce"] = "base64:" + base64.b64encode(
-                    TRIAL_OVER_ANNOUNCE.encode()).decode()
+                    (EN_TRIAL_OVER_ANNOUNCE if en else TRIAL_OVER_ANNOUNCE).encode()).decode()
         else:
             log_unknown_uuid(client_uuid, request)
-            content = STALE_SUBSCRIPTION_CONTENT
+            content = EN_STALE_SUBSCRIPTION_CONTENT if en else STALE_SUBSCRIPTION_CONTENT
     if refusal:
-        content = DEVICE_REFUSAL_CONTENT[refusal]
+        content = (EN_DEVICE_REFUSAL_CONTENT if en else DEVICE_REFUSAL_CONTENT)[refusal]
     if headers and no_routing:
         headers["routing-enable"] = "0"
     if headers and is_happ and _is_legacy_host(request):

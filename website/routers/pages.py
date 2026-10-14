@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 from starlette.background import BackgroundTask
 
 import credentials
+import settings
 from utils import generate_qrcode
 from db import UserManager
 from templates_env import templates
@@ -21,13 +22,14 @@ with open(BLOG_ARTICLES_PATH, encoding="utf-8") as f:
 ARTICLES_BY_SLUG = {a["slug"]: a for a in ARTICLES}
 
 # Тот же диплинк, что уже используется в routers/vpn.py (support-url в заголовках подписки).
-BOT_LINK = "https://t.me/Horizance_vpn_bot?start=183640993"
+BOT_LINK = settings.site_bot_link("qr")
 
 router = APIRouter(tags=["pages"])
 
 @router.get("/")
 async def index_page(request: Request):
-    return templates.TemplateResponse(request, "index.html", {})
+    # иностранцу — короткая английская главная (index_en.html); роботам и русским — index.html (app.site_language)
+    return templates.TemplateResponse(request, "index_en.html" if request.state.en else "index.html", {})
 
 def safe_next(url: str | None) -> str:
     """Куда вернуть после входа (?next=). Только путь на нашем сайте:

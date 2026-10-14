@@ -80,3 +80,6 @@ db_interventions.py
 old_test.py
 compensate_uuid_victims.py
 find_double_uuid_victims.py
+# состояние сбоя оплаты: user_id клиентов и тексты им (14.10.2026)
+payment_outage.json
+abandoned_alerted.json

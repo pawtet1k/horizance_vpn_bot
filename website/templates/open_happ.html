@@ -9,8 +9,8 @@
    ссылкой на скачивание.
    ═══════════════════════════════════════════════════════════════ #}
 
-{% block title %}Открываем Happ — Horizance VPN{% endblock %}
-{% block meta_description %}Открываем ваш VPN-конфиг в приложении Happ.{% endblock %}
+{% block title %}{{ t("Открываем", "Opening") }} {{ app_name }} — Horizance VPN{% endblock %}
+{% block meta_description %}Открываем ваш VPN-конфиг в приложении {{ app_name }}.{% endblock %}
 {% block robots %}noindex, nofollow{% endblock %}
 
 {% block content %}
@@ -18,26 +18,26 @@
   <div class="bg-surface border border-line rounded-2xl p-5 sm:p-10 w-full max-w-md text-center">
 
     <div id="state-trying">
-      <p class="text-dim text-sm mb-4">Открываем Happ...</p>
+      <p class="text-dim text-sm mb-4">{{ t("Открываем", "Opening") }} {{ app_name }}...</p>
       <div class="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto"></div>
     </div>
 
     <div id="state-store" class="hidden">
-      <h1 class="text-xl font-semibold mb-2">Установите Happ</h1>
-      <p class="text-dim text-sm mb-6">Приложение не найдено на устройстве</p>
+      <h1 class="text-xl font-semibold mb-2">{{ t("Установите", "Install") }} {{ app_name }}</h1>
+      <p class="text-dim text-sm mb-6">{{ t('Приложение не найдено на устройстве', 'The app was not found on your device') }}</p>
       <a href="{{ store_url or '/trial' }}"
          class="block w-full bg-white text-black font-semibold rounded-xl py-4 mb-3">
-        Скачать приложение
+        {{ t('Скачать приложение', 'Download the app') }}
       </a>
-      <a href="{{ happ_url }}"
+      <a href="{{ open_url }}"
          class="block w-full bg-surface2 border border-line2 rounded-xl py-3 text-sm text-dim">
-        Уже установлено — попробовать снова
+        {{ t('Уже установлено — попробовать снова', 'Already installed — try again') }}
       </a>
-      {% if is_ios %}{% include "_ios_appstore_fallback.html" %}{% endif %}
+      {% if is_ios and app_name == "Happ" and not is_en() %}{% include "_ios_appstore_fallback.html" %}{% endif %}
     </div>
 
     <script>
-      const happUrl = {{ happ_url | tojson }};
+      const openUrl = {{ open_url | tojson }};
       const stateTrying = document.getElementById('state-trying');
       const stateStore  = document.getElementById('state-store');
 
@@ -47,7 +47,7 @@
       }
 
       const start = Date.now();
-      window.location.href = happUrl;
+      window.location.href = openUrl;
 
       setTimeout(() => {
         if (Date.now() - start < 3000) showStore();

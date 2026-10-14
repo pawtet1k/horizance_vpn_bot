@@ -44,7 +44,7 @@ Never print or log the contents of this file.
 
 `test.py` mocks `db.UserManager.DB_NAME` to `test_users.db` and `settings.XRAY_CONFIG_PATH` to
 `test_config.json` before running, and drives handlers directly (no real Telethon dispatcher/connection).
-All 86 tests currently pass (last verified 2026-10-06). test.py sets `HORIZANCE_LOG_DIR` to a temp dir before importing the project, so tests no longer write into the production `my_logger/` (older prod log lines with ids 333001, 444001, 777xxx, 888xxx or node "DE 10.0.0.1" came from tests before 2026-09-26). Two behavior notes worth knowing before "fixing" a future failure here:
+All 88 tests currently pass (last verified 2026-10-13). test.py sets `HORIZANCE_LOG_DIR` to a temp dir before importing the project, so tests no longer write into the production `my_logger/` (older prod log lines with ids 333001, 444001, 777xxx, 888xxx or node "DE 10.0.0.1" came from tests before 2026-09-26). Two behavior notes worth knowing before "fixing" a future failure here:
 `start_vpn_setup` always re-prompts for device OS via `/config` (or the `generate_settings_link` button)
 even if `device_os` was already saved from a previous run — there's no "skip prompt, just reprovision"
 path, by design; and the promo free-trial-extension keyword checked in `main.handle_message` is the
@@ -180,3 +180,78 @@ around from an earlier refactor.
 
 Most user-facing strings are Russian; keep new user-facing copy consistent with that (and with the
 existing tone/emoji conventions) unless told otherwise.
+
+## Английский интерфейс и журнал переписки (с 11.10.2026)
+
+- **Язык**: иностранцу (язык Telegram/браузера не ru/uk/be/kk, без кириллицы в имени, IP не RU) бот, сайт и заглушки Happ
+  отвечают по-английски. Бот — `i18n.py` (`is_english`, `tr(user|id, ru, en)`), сайт — middleware `site_language` в
+  `website/app.py` → `request.state.en`, в шаблонах `{{ t(ru, en) }}` / `is_en()`. Поисковым роботам всегда русская версия.
+  Новый пользовательский текст пиши сразу в двух языках.
+- **Перед любым сообщением пользователю — прочитать `docs/USER_COMMUNICATION_RULES.md`.**
+- **Переписка с пользователями** — только через `utils.send_telegram_api_message`: он пишет каждое сообщение в дневной лог
+  строкой «Ответ техподдержки для <id>: …». Ручные сообщения до 11.10 — в `my_logger/info/support_restored.log`.
+- **Брошенные оплаты**: `node_monitor._abandoned_orders` сообщает владельцу о заказах без оплаты старше 30 мин.
+- **Инбаунд `vless_xhttp_pu` (NL:2096, packet-up)** добавлен через `xray api adi` для теста одного пользователя и
+  **не переживает рестарт xray**.
+
+## Мониторинг UDM Pay и дубли «брошенных оплат» (с 11.10.2026, Sonnet в отдельной сессии)
+
+- 11.10 07:46–… UDM Pay (84.201.157.37:443) не принимал TCP-соединения ни с нашей ноды, ни с check-host (RU/NL/DE) — их сбой, не наш код.
+  При этом заказ не создаётся → в `payment_orders` строки нет → «брошенная оплата» не срабатывает (клиентка 307069466).
+- `node_monitor.run_udmpay_watch` (запускается в `main.py`, если `UDMPAY_ENABLED`): пинг раз в 60 с, письмо «недоступен» после 2 промахов подряд и
+  «снова онлайн» с длительностью; каждая проверка — в `my_logger/stats/udmpay_uptime.csv` (utc, ok, error, sec).
+- Дубли писем про kodredim: `_last_alert` жил только в памяти, каждый рестарт бота присылал письмо снова (окно заказа — сутки).
+  Теперь ключи пишутся в `abandoned_alerted.json` рядом с `node_traffic_records.json`.
+
+### 12.10.2026: сбой UDM Pay продолжается (дроны по ЦОД Яндекса, UDM Pay в Yandex Cloud AS200350)
+- Текст ошибки в `subscription.py` (`httpx.TransportError`) теперь про атаки на ЦОД Яндекса. Клиентам 466446017, 307069466, 616093378, 33670846 и 632675764 отправлено сообщение (в логе «Ответ техподдержки…»).
+- 632675764 бот отключил 12.10 09:19 — возвращён: `status=active`, `next_payment_date=19.10.26`, `setup_xray` выполнен. Срок поставлен с запасом, чтобы `process_payments` не писал «истекает завтра» и не отключал, пока оплата не работает; продлить или вернуть к реальному сроку после восстановления UDM Pay.
+- **Рассылка «оплата заработала» запрограммирована** (`node_monitor.notify_recovered`, вызывается из `run_udmpay_watch` после 2 успешных пингов подряд).
+  Получатели: `payment_outage.json` → `users` (кому UDM Pay не создал заказ; пишет `subscription.py`; вне объявленного сбоя список стирается) + неоплаченные `payment_orders` с даты `since`
+  (крипта), минус оплатившие после и владелец. Сообщение с кнопками тарифов, уходит через `send_telegram_api_message` (лог «Ответ техподдержки…»).
+  Состояние сбоя (`down_since`) лежит в том же файле и переживает рестарт. Проверяется доступность хоста, не создание заказа.
+- Правила статусов при возврате (владелец, 12.10): `active` — только тем, кто хоть раз успешно оплатил (`paid_periods>0`); остальным `trial`.
+  616093378 (никогда не платила) возвращена как `trial` до 19.10.26.
+- Не-в-списке рассылки: 956118484 (@kodredim — крипто-счёт 10.10, до сбоя; бот заблокирован) — исключён: `since` = 2026-10-11.
+
+### 13.10.2026 (Opus): правка кода сбоя UDM Pay
+- Текст клиенту при недоступном UDM Pay — `SubscriptionManager._udmpay_unreachable_text`: причина из `settings.PAYMENT_OUTAGE_REASON`
+  показывается **только пока сбой объявлен** (`payment_outage.is_down()`); иначе прежнее «попробуйте через минуту».
+  **После восстановления UDM Pay очистить `PAYMENT_OUTAGE_REASON = ("", "")`** — следующий сбой может быть не про дронов.
+- Пинг: «лежит» = нет HTTP-ответа (код ответа корня API в рабочем режиме не известен, 5xx не считаем сбоем); код пишется в csv.
+- Возврат за сбой: 140785730 (mairamay) — `active` до 20.10.26. Временные даты 632675764 (19.10) и 140785730 (20.10) **сдвинуть**,
+  если оплата не заработает до 18–19.10: иначе бот пришлёт «истекает завтра» и отключит. `stats_growth.py` считает их «срок не подошёл».
+- Трафик в `users.traffic_in/out` — в **МБ**, не в байтах.
+
+### 13.10.2026: устройства подписки — /devices (бот и сайт) и опция «доп. устройства»
+- Бот: `/devices` (в меню команд) — список устройств, «Убрать»/«Вернуть», опция «➕ Ещё 3 устройства». Сайт: `/devices`
+  (карточка «Мои устройства» в ЛК), POST `/devices/remove|restore`, POST `/devices/extra/{on|off|with_subscription}`,
+  GET `/devices/extra?method=` (доплата).
+- **Модель оплаты — add-on с общей датой продления (co-terming, как в SaaS):** `users.extra_devices=1` — опция подключена и
+  продлевается вместе с подпиской одним платежом (`SubscriptionManager._order_amounts`: месяц 99+99, год 999+999; в журнале
+  `payment_orders.price` = сумма, `base_price` = тариф, срок и `paid_periods` — по `base_price`). Подключил посреди оплаченного
+  срока — `buy_extra_devices`: доплата за остаток пропорционально дням (`extra_devices_quote`, минимум 10 ₽ / $1.8 — у
+  NOWPayments минимум счёта), заказ `product='extra_devices'` → `_activate_extra_devices` (`extra_devices_until` = дата подписки).
+  На триале опция просто включается и входит в первую оплату. Отключение — устройства до конца оплаченного срока.
+- `device_guard`: лимит = `DEVICE_LIMIT` (+3, пока `extra_devices_until` не прошёл); служебные hwid (`DEVICE_LIMIT_EXEMPT_HWIDS`)
+  в лимит не входят и в /devices не показываются. Убранное устройство (`devices.removed_at`) получает заглушку `device_removed`.
+  Опция закончилась, а устройств больше лимита — работают первые по времени подключения, остальным заглушка `device_limit`.
+- Брошенные оплаты: отметка «владельцу уже написали» — `payment_orders.abandoned_alerted_at` (файл abandoned_alerted.json удалён).
+- INCY: профиль маршрутизации Happ отдаётся INCY как `incy://routing/onadd/…`, пока за флагом `settings.INCY_ROUTING_ENABLED=False`;
+  проверка на устройстве — `/sub/<uuid>?incy_routing=1`.
+- Удержание в `stats_growth.py` (с 13.10, определение владельца): (продлили + пытались продлить) ÷ все, у кого закончилась платная подписка.
+
+### 14.10.2026: UDM Pay ожил без нашего магазина
+- 14.10 04:53 МСК хост UDM Pay вернулся (новый IP 80.90.183.132, уже не Yandex Cloud), но на любой запрос нашего логина
+  отвечает `HTTP 404 «No query results for model [App\Models\Accounts\Account]»` — магазин не найден. Нужна поддержка UDM Pay.
+  Старый пинг хоста принял это за восстановление и в 04:54 разослал «оплата снова работает» 7 людям — зря.
+- Теперь `udmpay.health_check` (запрос /order/status нашим логином) — основа `run_udmpay_watch`; `account_missing` = сбой.
+  Ошибка 404 Account при создании заказа → тот же текст, что при сбое (с предложением криптовалюты), и попытка пишется в
+  `payment_outage.json`. Эти 7 человек возвращены в список рассылки — получат её повторно при настоящем восстановлении.
+- Тесты подменяют `settings.PAYMENT_OUTAGE_PATH` во всех BotIntegrationTestCase (раньше тест писал в боевой файл).
+- `payment_outage.json` → `attempts` {user_id: время последней неудачной СБП}; письмо о брошенной оплате пишет «перед этим СБП
+  не сработала», только если `failed_between` нашёл попытку этого человека за 2 ч до заказа (раньше — любому во время сбоя).
+- Поддержка UDM Pay: восстановят 14–15.10 — эта дата в `PAYMENT_OUTAGE_REASON`; не заработает к 16.10 — поправить текст.
+- Метки источника: все ссылки сайта на бота — `/go/bot?src=<страница>` → `t.me/…?start=site_<страница>` (`settings.site_bot_link`);
+  бот пишет «Пришёл с сайта: <страница>» и ставит пригласившим владельца, как раньше (stats_growth «ссылка с сайта»). Ссылки в статьях
+  блога (`blog_articles.json`) — `src=blog_<slug>`. Нечисловой /start больше не роняет создание пользователя.

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="{{ t('ru', 'en') }}">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -195,41 +195,45 @@
 
 <!-- ═══════════════ HEADER / основная навигация ═══════════════ -->
 <header class="border-b border-line sticky top-0 z-50 bg-bg/90 backdrop-blur-sm">
-  <nav class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between" aria-label="Основная навигация">
+  <nav class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between" aria-label="{{ t('Основная навигация', 'Main navigation') }}">
 
     <!-- Логотип -->
-    <a href="/" class="hz-logo flex items-center gap-2.5 text-lg font-bold tracking-tight shrink-0" aria-label="Horizance VPN — на главную">
+    <a href="/" class="hz-logo flex items-center gap-2.5 text-lg font-bold tracking-tight shrink-0" aria-label="{{ t('Horizance VPN — на главную', 'Horizance VPN — home') }}">
       <img src="{{ static_v('/static/img/logo.svg') }}" alt="" class="hz-logo-mark w-8 h-8" aria-hidden="true"/>
       <span><span class="text-primary-light">Horizance</span> <span class="text-ink">VPN</span></span>
     </a>
 
     <div class="hidden xl:flex items-center gap-8 text-sm text-dim">
-      <a href="/#how" class="hover:text-ink transition-colors">Как это работает</a>
-      <a href="/#pricing" class="hover:text-ink transition-colors">Тарифы</a>
+      <a href="/#how" class="hover:text-ink transition-colors">{{ t('Как это работает', 'How it works') }}</a>
+      <a href="/#pricing" class="hover:text-ink transition-colors">{{ t('Тарифы', 'Pricing') }}</a>
       <a href="/#faq" class="hover:text-ink transition-colors">FAQ</a>
-      <a href="/blog" class="hover:text-ink transition-colors">Блог</a>
+      <a href="/blog" class="hover:text-ink transition-colors">{{ t('Блог', 'Blog') }}</a>
     </div>
 
     <!-- Кнопки — иконки Font Awesome с подписью, подпись скрывается в portrait/мобильном режиме, чтобы влезало на одной линии -->
-    <div class="flex items-center gap-2 sm:gap-3">
+    <div class="flex items-center gap-1.5 sm:gap-3">
+      {# переключатель языка (11.10.26): запоминается в cookie hz_lang (app.site_language); nofollow — роботам русская версия #}
+      <a href="{{ request.url.path }}?lang={{ t('en', 'ru') }}" rel="nofollow"
+         class="shrink-0 text-xs font-semibold text-dim border border-line2 rounded-xl px-1.5 sm:px-2.5 py-2 hover:border-faint hover:text-ink transition-colors"
+         aria-label="{{ t('Switch to English', 'Переключить на русский') }}" title="{{ t('English', 'Русский') }}">{{ t('EN', 'RU') }}</a>
       {% block header_cta %}
       <a href="/blog"
          class="flex items-center gap-2 text-sm font-semibold text-ink2 border border-line2 rounded-xl px-3 py-2 hover:border-faint hover:bg-surface2 transition-colors"
-         aria-label="Блог">
+         aria-label="{{ t('Блог', 'Blog') }}">
         <i class="fa-solid fa-feather" aria-hidden="true"></i>
-        <span class="hidden sm:inline">Блог</span>
+        <span class="hidden sm:inline">{{ t('Блог', 'Blog') }}</span>
       </a>
       <a href="/auth"
          class="flex items-center gap-2 text-sm font-semibold text-ink2 border border-line2 rounded-xl px-3 py-2 hover:border-faint hover:bg-surface2 transition-colors"
-         aria-label="Зарегистрироваться">
+         aria-label="{{ t('Зарегистрироваться', 'Sign up') }}">
         <i class="fa-solid fa-user-plus" aria-hidden="true"></i>
-        <span class="hidden sm:inline">Зарегистрироваться</span>
+        <span class="hidden sm:inline">{{ t('Зарегистрироваться', 'Sign up') }}</span>
       </a>
       <a href="/trial"
          class="flex items-center gap-2 text-sm font-semibold bg-primary hover:bg-primary-light text-white rounded-xl px-3 py-2 transition-colors"
-         title="Без регистрации" aria-label="Попробовать бесплатно, без регистрации">
+         title="{{ t('Без регистрации', 'No sign-up') }}" aria-label="{{ t('Попробовать бесплатно, без регистрации', 'Try for free, no sign-up') }}">
         <i class="fa-solid fa-circle-play" aria-hidden="true"></i>
-        <span class="hidden sm:inline">Попробовать бесплатно</span>
+        <span class="hidden sm:inline">{{ t('Попробовать бесплатно', 'Try for free') }}</span>
       </a>
       {% endblock %}
     </div>
@@ -250,51 +254,51 @@
         <img src="{{ static_v('/static/img/logo.svg') }}" alt="" class="w-6 h-6" aria-hidden="true"/>
         <span><span class="text-primary-light">Horizance</span> <span class="text-ink">VPN</span></span>
       </div>
-      <p class="text-mute leading-relaxed">VPN на протоколе VLESS Reality.<br/>Работает там, где другие — нет.</p>
+      <p class="text-mute leading-relaxed">{{ t('VPN на протоколе VLESS Reality.', 'VPN on the VLESS Reality protocol.') }}<br/>{{ t('Работает там, где другие — нет.', "Works where others don't.") }}</p>
     </div>
 
-    <nav aria-label="Продукт">
-      <div class="text-ink2 font-semibold mb-3">Продукт</div>
+    <nav aria-label="{{ t('Продукт', 'Product') }}">
+      <div class="text-ink2 font-semibold mb-3">{{ t('Продукт', 'Product') }}</div>
       <ul class="space-y-2 text-dim">
-        <li><a href="/#pricing" class="hover:text-ink transition-colors block py-1.5">Тарифы</a></li>
-        <li><a href="/trial" class="hover:text-ink transition-colors block py-1.5">Бесплатный тест на 24 часа</a></li>
-        <li><a href="/happ" class="hover:text-ink transition-colors block py-1.5">Ключ и подписка для Happ</a></li>
-        <li><a href="/qr_code" class="hover:text-ink transition-colors block py-1.5">QR-код для бота</a></li>
-        <li><a href="/blog" class="hover:text-ink transition-colors block py-1.5">Блог</a></li>
+        <li><a href="/#pricing" class="hover:text-ink transition-colors block py-1.5">{{ t('Тарифы', 'Pricing') }}</a></li>
+        <li><a href="/trial" class="hover:text-ink transition-colors block py-1.5">{{ t('Бесплатный тест на 24 часа', 'Free 24-hour trial') }}</a></li>
+        <li><a href="/happ" class="hover:text-ink transition-colors block py-1.5">{{ t('Ключ и подписка для Happ', 'Happ key and subscription') }}</a></li>
+        <li><a href="/qr_code" class="hover:text-ink transition-colors block py-1.5">{{ t('QR-код для бота', 'Bot QR code') }}</a></li>
+        <li><a href="/blog" class="hover:text-ink transition-colors block py-1.5">{{ t('Блог', 'Blog') }}</a></li>
       </ul>
     </nav>
 
-    <nav aria-label="Платформы">
-      <div class="text-ink2 font-semibold mb-3">Платформы</div>
+    <nav aria-label="{{ t('Платформы', 'Platforms') }}">
+      <div class="text-ink2 font-semibold mb-3">{{ t('Платформы', 'Platforms') }}</div>
       <ul class="space-y-2 text-dim">
-        <li><a href="/#platforms" class="hover:text-ink transition-colors block py-1.5">VPN для Android</a></li>
-        <li><a href="/#platforms" class="hover:text-ink transition-colors block py-1.5">VPN для iPhone</a></li>
-        <li><a href="/#platforms" class="hover:text-ink transition-colors block py-1.5">VPN для Windows</a></li>
-        <li><a href="/#platforms" class="hover:text-ink transition-colors block py-1.5">VPN для Mac</a></li>
-        <li><a href="/#platforms" class="hover:text-ink transition-colors block py-1.5">VPN для Linux</a></li>
-        <li><a href="/tv" class="hover:text-ink transition-colors block py-1.5">VPN для телевизора</a></li>
-        <li><a href="/incy" class="hover:text-ink transition-colors block py-1.5">Приложение INCY</a></li>
+        <li><a href="/#platforms" class="hover:text-ink transition-colors block py-1.5">{{ t('VPN для Android', 'VPN for Android') }}</a></li>
+        <li><a href="/#platforms" class="hover:text-ink transition-colors block py-1.5">{{ t('VPN для iPhone', 'VPN for iPhone') }}</a></li>
+        <li><a href="/#platforms" class="hover:text-ink transition-colors block py-1.5">{{ t('VPN для Windows', 'VPN for Windows') }}</a></li>
+        <li><a href="/#platforms" class="hover:text-ink transition-colors block py-1.5">{{ t('VPN для Mac', 'VPN for Mac') }}</a></li>
+        <li><a href="/#platforms" class="hover:text-ink transition-colors block py-1.5">{{ t('VPN для Linux', 'VPN for Linux') }}</a></li>
+        <li><a href="/tv" class="hover:text-ink transition-colors block py-1.5">{{ t('VPN для телевизора', 'VPN for TV') }}</a></li>
+        <li><a href="/incy" class="hover:text-ink transition-colors block py-1.5">{{ t('Приложение INCY', 'INCY app') }}</a></li>
       </ul>
     </nav>
 
-    <nav aria-label="Поддержка">
-      <div class="text-ink2 font-semibold mb-3">Поддержка</div>
+    <nav aria-label="{{ t('Поддержка', 'Support') }}">
+      <div class="text-ink2 font-semibold mb-3">{{ t('Поддержка', 'Support') }}</div>
       <ul class="space-y-2 text-dim">
-        <li><a href="/#faq" class="hover:text-ink transition-colors block py-1.5">Частые вопросы</a></li>
-        <li><a href="/status" class="hover:text-ink transition-colors block py-1.5">Что работает сейчас</a></li>
-        <li><a href="/happ/iphone" class="hover:text-ink transition-colors block py-1.5">Happ на iPhone: пропал из App Store</a></li>
-        <li><a href="/happ/oshibki" class="hover:text-ink transition-colors block py-1.5">Ошибки Happ</a></li>
-        <li><a href="/help" class="hover:text-ink transition-colors block py-1.5">Написать в поддержку</a></li>
-        <li><a href="/go/bot?src=footer" class="hover:text-ink transition-colors block py-1.5">Telegram-бот</a></li>
+        <li><a href="/#faq" class="hover:text-ink transition-colors block py-1.5">{{ t('Частые вопросы', 'FAQ') }}</a></li>
+        <li><a href="/status" class="hover:text-ink transition-colors block py-1.5">{{ t('Что работает сейчас', 'Service status') }}</a></li>
+        <li><a href="/happ/iphone" class="hover:text-ink transition-colors block py-1.5">{{ t('Happ на iPhone: пропал из App Store', 'Happ on iPhone: missing from App Store') }}</a></li>
+        <li><a href="/happ/oshibki" class="hover:text-ink transition-colors block py-1.5">{{ t('Ошибки Happ', 'Happ errors') }}</a></li>
+        <li><a href="/help" class="hover:text-ink transition-colors block py-1.5">{{ t('Написать в поддержку', 'Contact support') }}</a></li>
+        <li><a href="/go/bot?src=footer" class="hover:text-ink transition-colors block py-1.5">{{ t('Telegram-бот', 'Telegram bot') }}</a></li>
       </ul>
     </nav>
   </div>
 
   <div class="border-t border-line max-w-6xl mx-auto px-6 py-5 text-xs text-faint flex flex-col sm:flex-row items-center justify-between gap-3">
-    <span>&copy; Horizance. Все права защищены.</span>
+    <span>&copy; Horizance. {{ t('Все права защищены.', 'All rights reserved.') }}</span>
     <div class="flex items-center gap-4">
-      <a href="/privacy" class="hover:text-dim transition-colors">Политика конфиденциальности</a>
-      <a href="/oferta" class="hover:text-dim transition-colors">Публичная оферта</a>
+      <a href="/privacy" class="hover:text-dim transition-colors">{{ t('Политика конфиденциальности', 'Privacy policy') }}</a>
+      <a href="/oferta" class="hover:text-dim transition-colors">{{ t('Публичная оферта', 'Terms of service') }}</a>
     </div>
   </div>
 </footer>
@@ -308,7 +312,7 @@
     <div class="w-12 h-12 rounded-full bg-surface2 border border-line2 flex items-center justify-center mx-auto mb-4">
       <i class="fa-solid fa-hammer text-lg text-accent" aria-hidden="true"></i>
     </div>
-    <h2 id="coming-soon-title" class="text-lg font-semibold mb-2">Скоро будет доступно</h2>
+    <h2 id="coming-soon-title" class="text-lg font-semibold mb-2">{{ t('Скоро будет доступно', 'Coming soon') }}</h2>
     <p class="text-dim text-sm mb-4 leading-relaxed" id="coming-soon-text">
       Эта функция ещё в разработке.
     </p>
@@ -316,16 +320,16 @@
          Telegram; кому Telegram не открывается — сутки бесплатно на /trial.
          src=login_modal — чтобы переходы отсюда было видно в логах -->
     <div id="coming-soon-login-hint" class="hidden text-left text-sm text-dim leading-relaxed bg-surface2 border border-line2 rounded-xl px-4 py-3 mb-6">
-      <p class="mb-2">Сейчас вход работает только через Telegram.</p>
-      <p class="mb-3">Если Telegram у вас не открывается из-за блокировок — возьмите бесплатный доступ на сутки, без регистрации:</p>
+      <p class="mb-2">{{ t('Сейчас вход работает только через Telegram.', 'Right now you can sign in only with Telegram.') }}</p>
+      <p class="mb-3">{{ t('Если Telegram у вас не открывается из-за блокировок — возьмите бесплатный доступ на сутки, без регистрации:', "If Telegram doesn't open for you, get free access for 24 hours, no sign-up:") }}</p>
       <a href="/trial?src=login_modal"
          class="block text-center bg-primary hover:bg-primary-light text-white font-semibold rounded-xl py-2.5 transition-colors">
-        Получить доступ на 24 часа
+        {{ t('Получить доступ на 24 часа', 'Get 24-hour access') }}
       </a>
     </div>
     <button type="button" onclick="closeComingSoonModal()"
             class="w-full bg-white text-black font-semibold rounded-xl py-3 hover:opacity-90 transition-opacity">
-      Понятно
+      {{ t('Понятно', 'Got it') }}
     </button>
   </div>
 </div>
@@ -334,8 +338,8 @@
     var modal = document.getElementById('coming-soon-modal');
     var text = document.getElementById('coming-soon-text');
     text.textContent = featureName
-      ? 'Этот способ входа («' + featureName + '») ещё в разработке.'
-      : 'Эта функция ещё в разработке.';
+      ? {{ t('Этот способ входа ещё в разработке: ', 'This sign-in method is still in development: ') | tojson }} + featureName
+      : {{ t('Эта функция ещё в разработке.', 'This feature is still in development.') | tojson }};
     var hint = document.getElementById('coming-soon-login-hint');
     if (hint) hint.classList.toggle('hidden', !featureName);
     modal.classList.remove('hidden');
@@ -353,21 +357,20 @@
      или "Отклонить", Метрика/GA4/Clarity не загружаются (см. loadAnalytics() в head). ═══ -->
 <div id="cookie-banner"
      class="hidden fixed inset-x-0 bottom-0 z-[90] border-t border-line bg-surface/95 backdrop-blur-sm px-6 py-5"
-     role="dialog" aria-live="polite" aria-label="Согласие на использование cookie">
+     role="dialog" aria-live="polite" aria-label="{{ t('Согласие на использование cookie', 'Cookie consent') }}">
   <div class="max-w-6xl mx-auto flex flex-col sm:flex-row items-center gap-4">
     <p class="text-sm text-dim leading-relaxed flex-1">
-      Мы используем файлы cookie и сервисы аналитики (Яндекс.Метрика, Google Analytics, Microsoft Clarity),
-      чтобы понимать, как вы пользуетесь сайтом, и делать его лучше. Подробнее — в
-      <a href="/privacy" class="text-ink2 underline hover:text-white transition-colors">политике конфиденциальности</a>.
+      {{ t('Мы используем файлы cookie и сервисы аналитики (Яндекс.Метрика, Google Analytics, Microsoft Clarity), чтобы понимать, как вы пользуетесь сайтом, и делать его лучше. Подробнее — в', 'We use cookies and analytics (Yandex.Metrica, Google Analytics, Microsoft Clarity) to understand how the site is used and improve it. Details are in our') }}
+      <a href="/privacy" class="text-ink2 underline hover:text-white transition-colors">{{ t('политике конфиденциальности', 'privacy policy') }}</a>.
     </p>
     <div class="flex items-center gap-3 shrink-0">
       <button type="button" onclick="setCookieConsent(false)"
               class="text-sm font-semibold text-ink2 border border-line2 rounded-xl px-5 py-2.5 hover:border-faint hover:bg-surface2 transition-colors">
-        Отклонить
+        {{ t('Отклонить', 'Decline') }}
       </button>
       <button type="button" onclick="setCookieConsent(true)"
               class="text-sm font-semibold bg-white text-black rounded-xl px-5 py-2.5 hover:opacity-90 transition-opacity">
-        Принять
+        {{ t('Принять', 'Accept') }}
       </button>
     </div>
   </div>
@@ -445,8 +448,8 @@
     <div id="hz-busy-text" class="hz-busy-text"></div>
     <div class="hz-busy-bar"><i></i></div>
     <div class="hz-busy-actions">
-      <button type="button" class="hz-busy-retry">Попробовать ещё раз</button>
-      <button type="button" class="hz-busy-cancel">Отмена</button>
+      <button type="button" class="hz-busy-retry">{{ t('Попробовать ещё раз', 'Try again') }}</button>
+      <button type="button" class="hz-busy-cancel">{{ t('Отмена', 'Cancel') }}</button>
     </div>
   </div>
 </div>
@@ -456,24 +459,24 @@
     // Сервер сам обрывает запрос к UDM Pay через 20 с и отдаёт страницу
     // с повтором, так что клиентский таймаут — страховка на случай зависшей сети.
     var KINDS = {
-      payment: { title: 'Создаём ссылку на оплату', timeout: 30,
-        steps: [[0, 'Обычно это занимает пару секунд'],
-                [5, 'Платёжная система отвечает дольше обычного…'],
-                [12, 'Всё ещё ждём ответа платёжной системы. Не закрывайте страницу']],
-        failed: 'Платёжная система не ответила. Деньги не списаны — попробуйте ещё раз.' },
-      vpn: { title: 'Готовим VPN-подключение', timeout: 45,
-        steps: [[0, 'Регистрируем ваш ключ на серверах'],
-                [8, 'Серверы отвечают дольше обычного…'],
-                [20, 'Всё ещё ждём ответа серверов. Не закрывайте страницу']],
-        failed: 'Серверы не ответили. Попробуйте ещё раз.' },
-      send: { title: 'Отправляем сообщение', timeout: 30,
-        steps: [[0, 'Это займёт пару секунд'],
-                [6, 'Почтовый сервер отвечает дольше обычного…']],
-        failed: 'Не удалось дождаться отправки. Попробуйте ещё раз — текст вопроса сохранится.' },
-      login: { title: 'Входим в личный кабинет', timeout: 20,
-        steps: [[0, 'Проверяем данные Telegram'],
-                [6, 'Это занимает дольше обычного…']],
-        failed: 'Не удалось войти. Попробуйте ещё раз.' }
+      payment: { title: {{ t('Создаём ссылку на оплату', 'Creating your payment link') | tojson }}, timeout: 30,
+        steps: [[0, {{ t('Обычно это занимает пару секунд', 'This usually takes a couple of seconds') | tojson }}],
+                [5, {{ t('Платёжная система отвечает дольше обычного…', 'The payment system is slower than usual…') | tojson }}],
+                [12, {{ t('Всё ещё ждём ответа платёжной системы. Не закрывайте страницу', 'Still waiting for the payment system. Please keep this page open') | tojson }}]],
+        failed: {{ t('Платёжная система не ответила. Деньги не списаны — попробуйте ещё раз.', 'The payment system did not respond. You were not charged — please try again.') | tojson }} },
+      vpn: { title: {{ t('Готовим VPN-подключение', 'Preparing your VPN connection') | tojson }}, timeout: 45,
+        steps: [[0, {{ t('Регистрируем ваш ключ на серверах', 'Registering your key on our servers') | tojson }}],
+                [8, {{ t('Серверы отвечают дольше обычного…', 'The servers are slower than usual…') | tojson }}],
+                [20, {{ t('Всё ещё ждём ответа серверов. Не закрывайте страницу', 'Still waiting for the servers. Please keep this page open') | tojson }}]],
+        failed: {{ t('Серверы не ответили. Попробуйте ещё раз.', 'The servers did not respond. Please try again.') | tojson }} },
+      send: { title: {{ t('Отправляем сообщение', 'Sending your message') | tojson }}, timeout: 30,
+        steps: [[0, {{ t('Это займёт пару секунд', 'This will take a couple of seconds') | tojson }}],
+                [6, {{ t('Почтовый сервер отвечает дольше обычного…', 'The mail server is slower than usual…') | tojson }}]],
+        failed: {{ t('Не удалось дождаться отправки. Попробуйте ещё раз — текст вопроса сохранится.', 'Sending took too long. Please try again — your text is kept.') | tojson }} },
+      login: { title: {{ t('Входим в личный кабинет', 'Signing you in') | tojson }}, timeout: 20,
+        steps: [[0, {{ t('Проверяем данные Telegram', 'Checking your Telegram data') | tojson }}],
+                [6, {{ t('Это занимает дольше обычного…', 'This is taking longer than usual…') | tojson }}]],
+        failed: {{ t('Не удалось войти. Попробуйте ещё раз.', 'Sign-in failed. Please try again.') | tojson }} }
     };
     var root = document.getElementById('hz-busy');
     var titleEl = document.getElementById('hz-busy-title');
@@ -509,7 +512,7 @@
         try { window.stop(); } catch (e) {}
         root.classList.add('is-timeout');
         if (window.hzT) hzT('busy_timeout:' + kindName);
-        titleEl.textContent = 'Ответа нет слишком долго';
+        titleEl.textContent = {{ t('Ответа нет слишком долго', 'No response for too long') | tojson }};
         setText(kind.failed);
         root.querySelector('.hz-busy-retry').focus();
       }, kind.timeout * 1000));
@@ -557,9 +560,9 @@
      «Чат» — до этого к tawk.to ничего не уходит (ни cookie, ни слежения), и не
      страдает скорость страницы. Кто уже открывал чат, тому на следующих
      страницах он подгружается сам (свёрнутым), чтобы не терять переписку. ═══ -->
-<button type="button" id="hz-chat-btn" aria-label="Открыть чат поддержки">
+<button type="button" id="hz-chat-btn" aria-label="{{ t('Открыть чат поддержки', 'Open support chat') }}">
   <i class="fa-solid fa-headset" aria-hidden="true"></i><span class="hz-chat-spin" aria-hidden="true"></span>
-  <span>Чат</span>
+  <span>{{ t('Чат', 'Chat') }}</span>
 </button>
 <script>
   /* Одна кнопка на экране — своя «Чат». Значок tawk.to не рисуется вообще (hideWidget в onBeforeLoad);

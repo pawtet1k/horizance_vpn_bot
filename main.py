@@ -1,10 +1,11 @@
 import asyncio
 import inspect
 from telethon import TelegramClient, events
-from telethon.tl.types import KeyboardButton, ReplyKeyboardMarkup
+from telethon.tl.types import KeyboardButton, MessageMediaWebPage, ReplyKeyboardMarkup
 import pymorphy3
 
 import bot
+from i18n import tr
 import credentials
 from my_logger import logger
 import settings
@@ -51,7 +52,9 @@ def safe_handler(func):
                 exc_info=True  # <-- полный traceback в лог
             )
             try:
-                await event.answer("Что-то пошло не так. Попробуйте позже или сообщите об этой ошибке разработчику, написав: '/help'.")
+                await event.answer(tr(event.sender_id,
+                    "Что-то пошло не так. Попробуйте позже или сообщите об этой ошибке разработчику, написав: '/help'.",
+                    "Something went wrong. Please try again later or report it to the developer via /help."))
             except Exception:
                 pass  # если даже ответить не можем — молча глотаем
     return wrapper
@@ -61,6 +64,10 @@ def safe_handler(func):
 @safe_handler
 async def start(event):
     logging_command(event.sender.id)
+    payload = event.message.text.split()[-1]
+    if payload.startswith(settings.WEB_LOGIN_PREFIX):
+        await bot.handle_web_login(event, vpn_bot, event.sender.id, payload[len(settings.WEB_LOGIN_PREFIX):], user_manager)
+        return
     await bot.handle_start(
         event, vpn_bot, event.sender.id, user_manager, subscription_manager, morth
     )
@@ -92,7 +99,15 @@ async def bot_qrcode(event):
 async def help(event):
     logging_command(event.sender.id)
     waiting_for_question.add(event.sender.id)
-    await event.reply("Задайте ваш вопрос:")
+    await bot.handle_help(event, event.sender.id)
+
+
+@vpn_bot.on(events.CallbackQuery(pattern=rb"^faq:"))
+@safe_handler
+async def help_faq(event):
+    logging_command(event.sender.id)
+    await event.answer()
+    await bot.callback_help_faq(vpn_bot, event.sender.id, event.data.decode().split(":", 1)[1])
 
 # Обработчик сообщений:
 # incoming=True обязателен: без него Telethon отдаёт обработчику и
@@ -103,7 +118,10 @@ async def help(event):
 async def forward_media_to_owner(event, user_id) -> bool:
     """Скриншоты и файлы из обращений: на почту уходит только текст, а чат
     бота владельцу не виден — поэтому вложение пересылаем ему в Telegram."""
-    if not event.message.media or user_id == settings.OWNER_TELEGRAM_ID:
+    # Превью ссылки Telegram кладёт в media (MessageMediaWebPage): без этой
+    # проверки любой текст со ссылкой уходил владельцу как «вложение».
+    media = event.message.media
+    if not media or isinstance(media, MessageMediaWebPage) or user_id == settings.OWNER_TELEGRAM_ID:
         return False
     try:
         username = getattr(event.sender, 'username', None) or '—'
@@ -138,7 +156,7 @@ async def handle_message(event):
             question += "\n[вложение переслано в Telegram]"
         user = user_manager.get_user(user_id)
         await utils.email_support(user, question)
-        await event.reply(bot.SUPPORT_THANKS_MESSAGE, parse_mode="html")
+        await event.reply(tr(user_id, bot.SUPPORT_THANKS_MESSAGE, bot.SUPPORT_THANKS_MESSAGE_EN), parse_mode="html")
         return
 
     # Обычное сообщение. Раньше оно только писалось в лог: человек писал боту
@@ -152,7 +170,7 @@ async def handle_message(event):
         user = user_manager.get_user(user_id)
         if user is not None:
             await utils.email_support(user, f"[сообщение без /help]\n{text}")
-            await event.reply(bot.SUPPORT_THANKS_MESSAGE, parse_mode="html")
+            await event.reply(tr(user_id, bot.SUPPORT_THANKS_MESSAGE, bot.SUPPORT_THANKS_MESSAGE_EN), parse_mode="html")
     await bot.handle_not_command_message(event, user_manager, vpn_manager)
 
 # Обработчики нажатия кнопок:
@@ -218,6 +236,12 @@ async def pay_method_crypto(event):
     logging_command(event.sender.id)
     await bot.callback_pay_crypto(vpn_bot, event.sender.id, user_manager, subscription_manager)
 
+@vpn_bot.on(events.CallbackQuery(data="pay_method_card"))
+@safe_handler
+async def pay_method_card(event):
+    logging_command(event.sender.id)
+    await bot.callback_pay_card(vpn_bot, event.sender.id, user_manager, subscription_manager)
+
 @vpn_bot.on(events.CallbackQuery(data="cancel_subscription"))
 @safe_handler
 async def cancel_subscription(event):
@@ -225,6 +249,51 @@ async def cancel_subscription(event):
     await bot.callback_cancel_subscription(
         vpn_bot, event.sender.id, subscription_manager
     )
+
+@vpn_bot.on(events.NewMessage(pattern='/devices', incoming=True))
+@safe_handler
+async def devices(event):
+    logging_command(event.sender.id)
+    await bot.show_devices(vpn_bot, event.sender.id, user_manager)
+
+@vpn_bot.on(events.CallbackQuery(pattern=rb"^dev_rm:"))
+@safe_handler
+async def device_remove(event):
+    logging_command(event.sender.id)
+    await bot.callback_device_remove(vpn_bot, event.sender.id, event.data.decode().split(":", 1)[1], user_manager)
+
+@vpn_bot.on(events.CallbackQuery(pattern=rb"^dev_back:"))
+@safe_handler
+async def device_restore(event):
+    logging_command(event.sender.id)
+    await bot.callback_device_restore(vpn_bot, event.sender.id, event.data.decode().split(":", 1)[1], user_manager)
+
+@vpn_bot.on(events.CallbackQuery(pattern=rb"^wl_(ok|no):"))
+@safe_handler
+async def web_login_answer(event):
+    logging_command(event.sender.id)
+    action, token = event.data.decode().split(":", 1)
+    await bot.callback_web_login(event, event.sender.id, token, action == "wl_ok", user_manager)
+
+@vpn_bot.on(events.CallbackQuery(data="extra_buy"))
+@safe_handler
+async def extra_buy(event):
+    logging_command(event.sender.id)
+    await bot.callback_extra_buy(vpn_bot, event.sender.id, user_manager, subscription_manager)
+
+@vpn_bot.on(events.CallbackQuery(pattern=rb"^extra_(on|off)$"))
+@safe_handler
+async def extra_toggle(event):
+    logging_command(event.sender.id)
+    on = event.data.decode() == "extra_on"
+    await bot.callback_extra_toggle(vpn_bot, event.sender.id, on, user_manager, subscription_manager)
+
+@vpn_bot.on(events.CallbackQuery(pattern=rb"^extra_pay_(sbp|crypto|card)$"))
+@safe_handler
+async def extra_pay(event):
+    logging_command(event.sender.id)
+    method = event.data.decode().removeprefix("extra_pay_")
+    await bot.callback_extra_pay(vpn_bot, event.sender.id, method, user_manager, subscription_manager)
 
 @vpn_bot.on(events.CallbackQuery)
 @safe_handler
@@ -250,7 +319,10 @@ async def main():
             settings.VPN_CLIENT_DOWNLOAD_URLS,
         ))
         asyncio.create_task(utils.ping(vpn_bot))
-        asyncio.create_task(NodeMonitor(vpn_manager, user_manager, vpn_bot).run())
+        _nm = NodeMonitor(vpn_manager, user_manager, vpn_bot)
+        asyncio.create_task(_nm.run())
+        if settings.UDMPAY_ENABLED:
+            asyncio.create_task(_nm.run_udmpay_watch())
         logger.info('--------------------------------------------------------')
         logger.info('Клиент telethon запущен.')
         await vpn_bot.run_until_disconnected()

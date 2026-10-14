@@ -2,6 +2,7 @@ from telethon import Button
 from yookassa import Configuration, Payment
 
 import asyncio
+import math
 import uuid
 
 import httpx
@@ -12,9 +13,12 @@ import settings
 import credentials
 import udmpay
 import nowpayments
+import payment_outage
+import whop
 from models import UserStatus
 from my_logger import logger
 from utils import broadcast_message, days_since, send_email
+from i18n import is_english, tr
 
 
 class SubscriptionManager:
@@ -84,22 +88,51 @@ class SubscriptionManager:
                 attempt += 1
         return False
 
-    def _order_description(self, price: int) -> str:
+    def _order_description(self, price: int, extra: bool = False) -> str:
         days = settings.get_billing_period_days(price)
-        return f"Подписка Horizance на {days} дней"
+        return (f"Подписка Horizance на {days} дней"
+                + (f" + {settings.EXTRA_DEVICES_COUNT} доп. устройства" if extra else ""))
+
+    def _order_amounts(self, user) -> tuple[int, float, int | None]:
+        """Сумма продления подписки с опцией «доп. устройства» (если подключена): (₽, $, base_price для журнала —
+        цена тарифа без опции или None, если опции нет). Срок и paid_periods считаются по тарифу, не по сумме."""
+        usd = settings.get_crypto_price_usd(user.price)
+        if not (user.extra_devices and user.price):
+            return user.price, usd, None
+        addon = settings.get_extra_devices_price(user.price)
+        return user.price + addon, round(usd * (user.price + addon) / user.price, 2), user.price
+
+    @staticmethod
+    def _udmpay_unreachable_text(user) -> str:
+        """UDM Pay не ответил. Во время объявленного сбоя (node_monitor.run_udmpay_watch) — причина и обещание
+        написать, когда заработает (рассылка notify_recovered); иначе это разовый таймаут — «через минуту»."""
+        if not payment_outage.is_down():
+            return tr(user, "⏳ Платёжная система сейчас не отвечает. Деньги не списаны — "
+                            "попробуйте ещё раз через минуту.",
+                      "⏳ The payment system is not responding. You were not charged — "
+                      "please try again in a minute.")
+        ru, en = settings.PAYMENT_OUTAGE_REASON
+        crypto = settings.NOWPAYMENTS_ENABLED
+        return tr(user, "⏳ Оплата по СБП временно недоступна" + (f": {ru}." if ru else ".") + " Деньги не списаны. "
+                        + ("Оплатить сейчас можно криптовалютой — кнопка «Криптовалюта» в /pay. " if crypto else "")
+                        + "Как только СБП заработает, мы сообщим вам в нашем Telegram-боте.",
+                  "⏳ SBP payments are temporarily unavailable" + (f": {en}." if en else ".") + " You were not charged. "
+                  + ("You can pay by cryptocurrency now — «Cryptocurrency» in /pay. " if crypto else "")
+                  + "We will message you in our Telegram bot as soon as SBP is back.")
 
     async def _create_udmpay_payment(self, vpn_bot, user):
         """Первый платёж через UDM Pay: заказ + привязка подписки СБП одним
         запросом. Оплата асинхронная (СБП QR через банк) — активация
         подписки происходит не здесь, а в activate_paid_subscription(),
         вызываемой вебхуком UDM Pay (см. website/routers/payments.py)."""
+        total, _, base_price = self._order_amounts(user)
         recent = self.user_manager.get_recent_unpaid_order(
-            user.user_id, "UDM Pay", user.price, settings.PAYMENT_LINK_REUSE_MINUTES
+            user.user_id, "UDM Pay", total, settings.PAYMENT_LINK_REUSE_MINUTES
         )
         if recent:
             # повторное нажатие — та же ссылка, а не новый заказ: иначе
             # человек оплачивает две ссылки (05.10.26, @Samij_Sok)
-            await self._send_udmpay_link(vpn_bot, user.user_id, recent["payment_link"])
+            await self._send_udmpay_link(vpn_bot, user, recent["payment_link"])
             logger.info(
                 f"{user.user_id}: повторно отдана ссылка неоплаченного заказа "
                 f"UDM Pay, orderUid={recent['order_id']}."
@@ -107,21 +140,29 @@ class SubscriptionManager:
             return True
 
         ext_order_id = f"user-{user.user_id}-{uuid.uuid4().hex[:8]}"
-        description = self._order_description(user.price)
+        description = self._order_description(user.price, extra=base_price is not None)
         try:
             result = await udmpay.create_subscription_with_payment(
-                ext_order_id=ext_order_id, price=user.price, description=description,
+                ext_order_id=ext_order_id, price=total, description=description,
                 baseline_paid_periods=user.paid_periods,
             )
         except udmpay.UdmPayError as e:
             logger.error(f"{user.user_id}: ошибка создания заказа UDM Pay: {e}")
+            if udmpay.is_account_missing(e) or payment_outage.is_down():
+                # 14.10.26: UDM Pay ожил без нашего магазина — это сбой, а не «попробуйте ещё раз»
+                payment_outage.note_attempt(user.user_id)
+                await vpn_bot.send_message(user.user_id, self._udmpay_unreachable_text(user))
+                return None
             if (e.status_code or 0) >= 500:
                 # сбой на стороне UDM Pay: 05.10.26 он длился ~10 минут, и
                 # «попробуйте еще разок» человек нажимал 10 раз подряд
-                text = ("⏳ Платёжная система временно не работает. Деньги не списаны — "
-                        "попробуйте через 10–15 минут.")
+                text = tr(user, "⏳ Платёжная система временно не работает. Деньги не списаны — "
+                                "попробуйте через 10–15 минут.",
+                          "⏳ The payment system is temporarily unavailable. You were not charged — "
+                          "please try again in 10–15 minutes.")
             else:
-                text = "Во время оплаты произошла ошибка. Попробуйте еще разок."
+                text = tr(user, "Во время оплаты произошла ошибка. Попробуйте еще разок.",
+                          "Something went wrong with the payment. Please try again.")
             await vpn_bot.send_message(user.user_id, text)
             return None
         except httpx.TransportError as e:
@@ -129,11 +170,8 @@ class SubscriptionManager:
             # дважды упала страница /pay/month). Ссылку человек не получил,
             # значит и платить ему было нечем.
             logger.warning(f"{user.user_id}: UDM Pay не ответил при создании заказа: {e!r}")
-            await vpn_bot.send_message(
-                user.user_id,
-                "⏳ Платёжная система сейчас не отвечает. Деньги не списаны — "
-                "попробуйте ещё раз через минуту."
-            )
+            payment_outage.note_attempt(user.user_id)
+            await vpn_bot.send_message(user.user_id, self._udmpay_unreachable_text(user))
             return None
 
         order_uid = result.get("orderUid")
@@ -149,26 +187,30 @@ class SubscriptionManager:
             pending_subscription_uid=subscription_uid,
         )
         self.user_manager.record_payment_order(
-            order_uid, user.user_id, "UDM Pay", user.price, payment_link
+            order_uid, user.user_id, "UDM Pay", total, payment_link, base_price=base_price
         )
 
-        await self._send_udmpay_link(vpn_bot, user.user_id, payment_link)
+        await self._send_udmpay_link(vpn_bot, user, payment_link)
         logger.info(
             f"{user.user_id}: создан заказ UDM Pay, orderUid={order_uid}, "
             f"subscriptionUid={subscription_uid}."
         )
         return True
 
-    async def _send_udmpay_link(self, vpn_bot, user_id, payment_link):
+    async def _send_udmpay_link(self, vpn_bot, user, payment_link):
         await vpn_bot.send_message(
-            user_id,
-            f"Для оплаты подписки перейдите по ссылке: {payment_link}\n\n"
-            "После оплаты подписка активируется автоматически "
-            "(обычно в течение минуты).\n\n"
-            "💡 Банк может предложить разрешить автоплатёж по этой подписке. "
-            "Если согласитесь — продлевать вручную больше не нужно, "
-            "отменить можно в любой момент в приложении банка или кнопкой "
-            "«Отключить оплату» в /start."
+            user.user_id,
+            tr(user,
+               f"Для оплаты подписки перейдите по ссылке: {payment_link}\n\n"
+               "После оплаты подписка активируется автоматически "
+               "(обычно в течение минуты).\n\n"
+               "💡 Банк может предложить разрешить автоплатёж по этой подписке. "
+               "Если согласитесь — продлевать вручную больше не нужно, "
+               "отменить можно в любой момент в приложении банка или кнопкой "
+               "«Отключить оплату» в /start.",
+               f"To pay, open this link: {payment_link}\n\n"
+               "SBP works only with Russian bank cards. If you don't have one, choose cryptocurrency instead (/pay).\n\n"
+               "After payment the subscription activates automatically, usually within a minute.")
         )
 
     async def _create_crypto_payment(self, vpn_bot, user):
@@ -178,11 +220,12 @@ class SubscriptionManager:
         вебхук вместо ручной проверки. Активация — activate_paid_subscription(),
         вызываемая вебхуком NOWPayments (см. website/routers/payments.py)."""
         ext_order_id = f"user-{user.user_id}-{uuid.uuid4().hex[:8]}"
-        description = self._order_description(user.price)
+        total, usd, base_price = self._order_amounts(user)
+        description = self._order_description(user.price, extra=base_price is not None)
         pay_currency = settings.get_crypto_pay_currency(user.price)
         try:
             result = await nowpayments.create_invoice(
-                price_amount=settings.get_crypto_price_usd(user.price),
+                price_amount=usd,
                 order_id=ext_order_id,
                 order_description=description,
                 ipn_callback_url=settings.WEBSITE_BASE_URL + "/api/payments/nowpayments/webhook",
@@ -192,29 +235,36 @@ class SubscriptionManager:
             logger.error(f"{user.user_id}: ошибка создания счёта NOWPayments: {e}")
             await vpn_bot.send_message(
                 user.user_id,
-                "Во время оплаты произошла ошибка. Попробуйте еще разок."
+                tr(user, "Во время оплаты произошла ошибка. Попробуйте еще разок.",
+                   "Something went wrong with the payment. Please try again.")
             )
             return None
 
         invoice_id = str(result.get("id"))
         invoice_url = result.get("invoice_url")
         self.user_manager.update_user(user.user_id, pending_order_uid=invoice_id)
-        self.user_manager.record_payment_order(invoice_id, user.user_id, "NOWPayments", user.price)
+        self.user_manager.record_payment_order(invoice_id, user.user_id, "NOWPayments", total, base_price=base_price)
 
+        english = is_english(user)
         if pay_currency:
-            payment_note = "Оплата принимается в USDT (сеть BSC / BNB Smart Chain)."
+            payment_note = ("Payment is accepted in USDT (BSC / BNB Smart Chain network)." if english
+                            else "Оплата принимается в USDT (сеть BSC / BNB Smart Chain).")
         else:
             # выбор открыт - но не все валюты пройдут по минимуму на такую
             # сумму, явно предупреждаем, чтобы ошибку NOWPayments не приняли
             # за нашу
             payment_note = (
+                "You can choose any currency on the page **except USDT on TRC20/Tron** — "
+                "its minimum is above the invoice amount, the payment won't go through." if english else
                 "На странице можно выбрать любую валюту, **кроме USDT в сети "
                 "TRC20/Tron** — у неё минимум выше суммы счёта, платёж не пройдёт."
             )
         await vpn_bot.send_message(
             user.user_id,
-            f"Для оплаты перейдите по ссылке: {invoice_url}\n\n"
-            f"{payment_note} После оплаты подписка активируется автоматически."
+            (f"To pay, open this link: {invoice_url}\n\n"
+             f"{payment_note} After payment the subscription activates automatically.") if english else
+            (f"Для оплаты перейдите по ссылке: {invoice_url}\n\n"
+             f"{payment_note} После оплаты подписка активируется автоматически.")
         )
         logger.info(f"{user.user_id}: создан счёт NOWPayments, invoiceId={invoice_id}.")
         return True
@@ -224,6 +274,169 @@ class SubscriptionManager:
             # бесплатная подписка (промо/реферальная) - крипта не нужна
             return await self.add_subscription(vpn_bot, user)
         return await self._create_crypto_payment(vpn_bot, user)
+
+    async def add_card_subscription(self, vpn_bot, user, redirect_url="https://t.me/Horizance_vpn_bot"):
+        """Оплата картой через Whop — для иностранцев (см. whop.py). Разовая, как крипта: на каждый период новая
+        ссылка; подтверждение — вебхук payment.succeeded (website/routers/payments.py)."""
+        if user.price == 0:
+            return await self.add_subscription(vpn_bot, user)
+        order_id = f"whop-{user.user_id}-{uuid.uuid4().hex[:8]}"
+        total, usd, base_price = self._order_amounts(user)
+        url = await whop.create_checkout(
+            order_id, user.user_id, usd,
+            settings.get_billing_period_days(user.price), redirect_url,
+        )
+        if not url:
+            await vpn_bot.send_message(user.user_id, tr(
+                user, "Во время оплаты произошла ошибка. Попробуйте еще разок.",
+                "Something went wrong with the payment. Please try again."))
+            return None
+        self.user_manager.update_user(user.user_id, pending_order_uid=order_id)
+        self.user_manager.record_payment_order(order_id, user.user_id, "Whop", total, url, base_price=base_price)
+        await vpn_bot.send_message(user.user_id, tr(
+            user,
+            f"Для оплаты картой перейдите по ссылке: {url}\n\nПосле оплаты подписка активируется автоматически.",
+            f"To pay by card, open this link: {url}\n\nAfter payment your subscription activates automatically."))
+        logger.info(f"{user.user_id}: создана оплата Whop, orderId={order_id}.")
+        return True
+
+    # ---------- доп. устройства (settings.EXTRA_DEVICES_*, 13.10.26) ----------
+    # Опция подписки (add-on с общей датой продления, как принято в SaaS): users.extra_devices=1 — продлевается вместе
+    # с подпиской одним платежом (_order_amounts), extra_devices_until — по какую дату оплачена. Подключение посреди
+    # оплаченного срока — доплата за остаток (отдельный заказ product='extra_devices'; вебхук любого из трёх
+    # провайдеров приходит в activate_paid_subscription, и там по product зачисляется опция, а не подписка).
+    # pending_order_uid у доплаты не ставим — это «замок» оплаты подписки; привязку СБП вебхук такого заказа не найдёт.
+    EXTRA_PRODUCT = "extra_devices"
+
+    def extra_devices_quote(self, user) -> dict:
+        """Что будет при подключении опции сейчас.
+        mode='prorate' — подписка оплачена: доплата rub/usd за остаток срока до until, дальше — вместе с подпиской;
+        mode='with_subscription' — оплаченного срока нет (триал/отключён): опция войдёт в оплату подписки;
+        mode='unavailable' — бесплатная подписка (price 0)."""
+        if user.price == 0:
+            return {"mode": "unavailable"}
+        addon = settings.get_extra_devices_price(user.price)
+        renewal = user.price + addon
+        try:
+            until = datetime.strptime(user.next_payment_date, "%d.%m.%y").date()
+        except (TypeError, ValueError):
+            until = None
+        today = datetime.now().date()
+        if not (user.status == UserStatus.ACTIVE and user.paid_periods and until and until >= today):
+            return {"mode": "with_subscription", "addon": addon, "renewal": renewal}
+        period = settings.get_billing_period_days(user.price)
+        share = min(1.0, ((until - today).days + 1) / period)
+        usd_addon = settings.get_crypto_price_usd(user.price) * addon / user.price
+        return {
+            "mode": "prorate", "addon": addon, "renewal": renewal, "until": user.next_payment_date,
+            "rub": max(settings.EXTRA_DEVICES_MIN_CHARGE_RUB, math.ceil(addon * share)),
+            "usd": max(settings.EXTRA_DEVICES_MIN_CHARGE_USD, round(usd_addon * share, 2)),
+        }
+
+    def set_extra_devices(self, user, on: bool) -> None:
+        """Подключить/отключить продление опции. Отключение не забирает уже оплаченное: устройства остаются
+        до extra_devices_until, со следующего продления — без опции."""
+        self.user_manager.update_user(user.user_id, extra_devices=1 if on else 0)
+        logger.info(f"{user.user_id}: опция «доп. устройства» {'подключена' if on else 'отключена'}")
+
+    async def buy_extra_devices(self, vpn_bot, user, method: str, return_url: str | None = None):
+        """Доплата за остаток оплаченного срока (quote mode='prorate'). method: 'sbp' | 'crypto' | 'card'.
+        Шлёт ссылку на оплату; True — ссылка отправлена."""
+        quote = self.extra_devices_quote(user)
+        if quote["mode"] != "prorate":
+            return None
+        price, usd = quote["rub"], quote["usd"]
+        description = f"{settings.EXTRA_DEVICES_COUNT} доп. устройства Horizance VPN до {quote['until']}"
+        return_url = return_url or f"{settings.WEBSITE_BASE_URL}/devices"
+        order_id, url, provider = None, None, None
+        error_text = tr(user, "Во время оплаты произошла ошибка. Попробуйте еще разок.",
+                        "Something went wrong with the payment. Please try again.")
+        if method == "sbp":
+            provider = "UDM Pay"
+            recent = self.user_manager.get_recent_unpaid_order(
+                user.user_id, provider, price, settings.PAYMENT_LINK_REUSE_MINUTES, product=self.EXTRA_PRODUCT)
+            if recent:
+                order_id, url = recent["order_id"], recent["payment_link"]
+            else:
+                try:
+                    result = await udmpay.create_subscription_with_payment(
+                        ext_order_id=f"extra-{user.user_id}-{uuid.uuid4().hex[:8]}", price=price,
+                        description=description, baseline_paid_periods=user.paid_periods, return_link=return_url,
+                    )
+                except udmpay.UdmPayError as e:
+                    logger.error(f"{user.user_id}: UDM Pay, доп. устройства: {e}")
+                    if udmpay.is_account_missing(e) or payment_outage.is_down():
+                        payment_outage.note_attempt(user.user_id)
+                        await vpn_bot.send_message(user.user_id, self._udmpay_unreachable_text(user))
+                    else:
+                        await vpn_bot.send_message(user.user_id, error_text)
+                    return None
+                except httpx.TransportError as e:
+                    logger.warning(f"{user.user_id}: UDM Pay не ответил при создании заказа: {e!r}")
+                    payment_outage.note_attempt(user.user_id)
+                    await vpn_bot.send_message(user.user_id, self._udmpay_unreachable_text(user))
+                    return None
+                order_id, url = result.get("orderUid"), result.get("paymentLink")
+        elif method == "crypto":
+            provider = "NOWPayments"
+            try:
+                result = await nowpayments.create_invoice(
+                    price_amount=usd, order_id=f"extra-{user.user_id}-{uuid.uuid4().hex[:8]}",
+                    order_description=description,
+                    ipn_callback_url=settings.WEBSITE_BASE_URL + "/api/payments/nowpayments/webhook",
+                    pay_currency=settings.get_crypto_pay_currency(settings.default_price),
+                )
+            except nowpayments.NowPaymentsError as e:
+                logger.error(f"{user.user_id}: NOWPayments, доп. устройства: {e}")
+                await vpn_bot.send_message(user.user_id, error_text)
+                return None
+            order_id, url = str(result.get("id")), result.get("invoice_url")
+        elif method == "card" and whop.enabled():
+            provider = "Whop"
+            order_id = f"whop-extra-{user.user_id}-{uuid.uuid4().hex[:8]}"
+            days = (datetime.strptime(quote["until"], "%d.%m.%y").date() - datetime.now().date()).days + 1
+            url = await whop.create_checkout(order_id, user.user_id, usd, days, return_url)
+        if not order_id or not url:
+            await vpn_bot.send_message(user.user_id, error_text)
+            return None
+        self.user_manager.record_payment_order(order_id, user.user_id, provider, price, url,
+                                               product=self.EXTRA_PRODUCT)
+        n, period = settings.EXTRA_DEVICES_COUNT, settings.get_billing_period_days(user.price)
+        amount = f"${usd}" if provider in ("NOWPayments", "Whop") else f"{price} ₽"
+        await vpn_bot.send_message(user.user_id, tr(
+            user,
+            f"Доплата за {n} доп. устройства до конца оплаченного срока ({quote['until']}): {amount}\n{url}\n\n"
+            f"После оплаты лимит увеличится сразу, а дальше устройства продлеваются вместе с подпиской: "
+            f"{quote['renewal']} ₽ за {period} дней вместо {user.price} ₽.",
+            f"Extra charge for {n} more devices until the end of your paid period ({quote['until']}): {amount}\n{url}\n\n"
+            f"The limit goes up right after payment; then the devices renew together with your subscription "
+            f"in one payment."))
+        logger.info(f"{user.user_id}: доп. устройства — доплата {amount}, заказ {provider}, orderId={order_id}.")
+        return True
+
+    async def _activate_extra_devices(self, vpn_bot, user, order_uid, provider) -> None:
+        self.user_manager.update_user(user.user_id, extra_devices=1, extra_devices_until=user.next_payment_date)
+        n, renewal = settings.EXTRA_DEVICES_COUNT, user.price + settings.get_extra_devices_price(user.price)
+        try:
+            await vpn_bot.send_message(user.user_id, tr(
+                user,
+                f"Оплата получена: подключено ещё {n} устройства. Новое устройство подключайте той же ссылкой. "
+                f"Дальше они продлеваются вместе с подпиской — {renewal} ₽ при следующем продлении "
+                f"({user.next_payment_date}). Отключить или посмотреть устройства — /devices.",
+                f"Payment received: {n} more devices added. Connect a new device with the same link. "
+                f"They now renew together with your subscription (next renewal {user.next_payment_date}). "
+                "Manage devices: /devices."))
+        except Exception as e:
+            logger.error(f"{user.user_id}: не удалось сообщить о доп. устройствах: {e}")
+        order = self.user_manager.get_payment_order(order_uid) or {}
+        send_email(
+            f"Оплата {provider}: доп. устройства от {user.user_id}",
+            f"User ID: {user.user_id}\nUsername: @{user.username or '—'}\nДоплата (₽ по заказу): {order.get('price')}\n"
+            f"Товар: +{n} устройства до {user.next_payment_date}, дальше в продлении {renewal} ₽\n"
+            f"Провайдер: {provider}\norderId: {order_uid}",
+            settings.NOTIFY_EMAIL)
+        logger.info(f"{user.user_id}: доп. устройства оплачены через {provider} (orderId={order_uid}), "
+                    f"до {user.next_payment_date}.")
 
     async def _charge_udmpay_subscription(self, user) -> bool:
         """Продление через уже привязанную подписку СБП (payment_token
@@ -238,12 +451,13 @@ class SubscriptionManager:
             return True
 
         ext_order_id = f"renew-{user.user_id}-{uuid.uuid4().hex[:8]}"
-        description = self._order_description(user.price)
+        total, _, base_price = self._order_amounts(user)
+        description = self._order_description(user.price, extra=base_price is not None)
         try:
             result = await udmpay.pay_by_subscription(
                 subscription_uid=user.payment_token,
                 ext_order_id=ext_order_id,
-                price=user.price,
+                price=total,
                 description=description,
             )
         except udmpay.UdmPayError as e:
@@ -252,7 +466,7 @@ class SubscriptionManager:
 
         order_uid = result.get("uid")
         self.user_manager.update_user(user.user_id, pending_order_uid=order_uid)
-        self.user_manager.record_payment_order(order_uid, user.user_id, "UDM Pay", user.price)
+        self.user_manager.record_payment_order(order_uid, user.user_id, "UDM Pay", total, base_price=base_price)
         logger.info(
             f"{user.user_id}: запрос на продление UDM Pay отправлен, "
             f"orderUid={order_uid}."
@@ -266,10 +480,15 @@ class SubscriptionManager:
         days = settings.get_billing_period_days(user.price)
         plan_label = "год" if user.price == settings.yearly_price else "месяц"
         full_name = " ".join(filter(None, [user.first_name, user.last_name])) or "—"
-        if provider == "NOWPayments":
-            amount_label = f"{settings.get_crypto_price_usd(user.price)} $"
+        order = self.user_manager.get_payment_order(order_uid) or {}
+        with_extra = bool(order.get("base_price"))
+        if with_extra:
+            plan_label += f" + {settings.EXTRA_DEVICES_COUNT} доп. устройства"
+        if provider in ("NOWPayments", "Whop"):
+            usd = settings.get_crypto_price_usd(user.price)
+            amount_label = f"{round(usd * order['price'] / user.price, 2) if with_extra else usd} $"
         else:
-            amount_label = f"{user.price} ₽"
+            amount_label = f"{order.get('price') or user.price} ₽"
         body = (
             f"User ID: {user.user_id}\n"
             f"Username: @{user.username or '—'}\n"
@@ -325,8 +544,14 @@ class SubscriptionManager:
             logger.warning(f"{user_id}: заказ {order_uid} уже зачтён, повторный вебхук игнорирую.")
             return
 
-        # цена — та, по которой создан заказ: между заказами могли сменить тариф
-        price = (order or {}).get("price") or user.price
+        if (order or {}).get("product") == self.EXTRA_PRODUCT:
+            await self._activate_extra_devices(vpn_bot, user, order_uid, provider)
+            return
+
+        # цена тарифа — та, по которой создан заказ (между заказами могли сменить тариф); в заказе с доп. устройствами
+        # price — общая сумма, а тариф лежит в base_price
+        price = (order or {}).get("base_price") or (order or {}).get("price") or user.price
+        addon_paid = bool((order or {}).get("base_price"))
         next_payment_date = self._extend_next_payment_date(
             user, settings.get_billing_period_days(price)
         )
@@ -340,6 +565,9 @@ class SubscriptionManager:
             status=UserStatus.ACTIVE,
             pending_order_uid=None,
         )
+        if addon_paid:
+            # опция продлена вместе с подпиской — до той же даты
+            updates["extra_devices_until"] = next_payment_date
         if user.device_os == settings.ROUTER_DEVICE:
             # оплата открывает роутеру новое окно лимита трафика
             updates["traffic_period_start"] = user.traffic_total_mb()
@@ -356,7 +584,8 @@ class SubscriptionManager:
         user = self.user_manager.get_user(user_id)
         await self.vpn_manager.setup_xray(user)
         try:
-            await vpn_bot.send_message(user_id, "Ваш платёж успешно завершён, подписка активирована! 🎉")
+            await vpn_bot.send_message(user_id, tr(user_id, "Ваш платёж успешно завершён, подписка активирована! 🎉",
+                                                   "Payment received, your subscription is active! 🎉"))
         except Exception as e:
             # заблокировал бота: оплата уже зачтена, а письмо владельцу нужно
             # всё равно (30.09.26 без этого письмо о cheet_nickers не ушло)
@@ -384,9 +613,13 @@ class SubscriptionManager:
         try:
             await vpn_bot.send_message(
                 referrer.user_id,
-                "🎁 Ваш друг оплатил подписку по вашей рекомендации. Спасибо! "
-                f"Дарим вам {settings.referral_free_days} дней бесплатно — "
-                f"подписка продлена до {updates['next_payment_date']}."
+                tr(referrer,
+                   "🎁 Ваш друг оплатил подписку по вашей рекомендации. Спасибо! "
+                   f"Дарим вам {settings.referral_free_days} дней бесплатно — "
+                   f"подписка продлена до {updates['next_payment_date']}.",
+                   "🎁 A friend you invited has paid for a subscription. Thank you! "
+                   f"Here are {settings.referral_free_days} free days — "
+                   f"your subscription is extended to {updates['next_payment_date']}.")
             )
         except Exception as e:
             logger.warning(f"{referrer.user_id}: не удалось сообщить о реферальном бонусе: {e}")
@@ -417,7 +650,8 @@ class SubscriptionManager:
 
         await vpn_bot.send_message(
             user_id,
-            f"Оплата не прошла: {message}\n\nПопробуйте ещё раз через /pay."
+            tr(user_id, f"Оплата не прошла: {message}\n\nПопробуйте ещё раз через /pay.",
+               f"Payment failed: {message}\n\nPlease try again via /pay.")
         )
         logger.warning(f"{user_id}: оплата {provider} отклонена (orderId={order_uid}): {message}")
 
@@ -603,6 +837,7 @@ class SubscriptionManager:
         на два дня раньше срока. Отключаем только в последний день, когда
         запаса времени уже нет.
         """
+        failed_charge_msg_en = None  # английский вариант для иностранцев (i18n.is_english)
         if user.payment_token == "crypto":
             if await self._charge_crypto_subscription(vpn_bot, user):
                 return None  # новый счёт отправлен, ждём вебхук с результатом
@@ -610,6 +845,7 @@ class SubscriptionManager:
                 "⚠️ Не удалось создать счёт на продление подписки.\n\n"
                 "Подключите оплату заново через /pay."
             )
+            failed_charge_msg_en = "⚠️ Could not create a renewal invoice.\n\nPlease subscribe again via /pay."
         elif user.payment_token:
             if settings.UDMPAY_ENABLED:
                 if await self._charge_udmpay_subscription(user):
@@ -618,6 +854,7 @@ class SubscriptionManager:
                     "⚠️ При попытке продления подписки оплата не прошла.\n\n"
                     "Подключите оплату заново через /pay."
                 )
+                failed_charge_msg_en = "⚠️ The renewal payment failed.\n\nPlease subscribe again via /pay."
             else:
                 payment = await self.create_payment(vpn_bot, user.user_id)
                 successful_payment = await self.track_payment_status(
@@ -630,6 +867,7 @@ class SubscriptionManager:
                     "⚠️ При попытке продления подписки оплата не прошла.\n\n"
                     "Подключите оплату заново через /pay."
                 )
+                failed_charge_msg_en = "⚠️ The renewal payment failed.\n\nPlease subscribe again via /pay."
 #       elif user.status == UserStatus.ACTIVE:
 #           logger.warning(
 #                f"У пользователя {user.user_id} статус active, "
@@ -642,14 +880,19 @@ class SubscriptionManager:
                 "оплатите подписку через /pay или воспользуйтесь "
                 f"[пробным доступом на 1 день]({credentials.TRIAL_LINK})."
             )
-        elif user.status == UserStatus.CANCELED or user.status == UserStatus.ACTIVE:
-            failed_charge_msg = (
-                "Оплаченный вами период закончился. "
-                "Надеемся, вы к нам еще вернетесь 🤗\n\n"
-                "Ваш VPN отключён, чтобы подключиться снова, "
-                "оплатите подписку через /pay или воспользуйтесь "
-                f"[пробным доступом на 1 день]({credentials.TRIAL_LINK})."
+            failed_charge_msg_en = (
+                "Your free trial has ended — we hope you enjoyed it 🤗\n\n"
+                "The VPN is now off. To keep using it, tap «Subscribe»."
             )
+        elif user.status == UserStatus.CANCELED or user.status == UserStatus.ACTIVE:
+            # платившему пробный доступ не предлагаем: он уже клиент, ему нужно продление
+            failed_charge_msg = (
+                "Оплаченный вами период закончился, VPN отключён.\n\n"
+                "Чтобы подключиться снова, нажмите «Продлить подписку» — "
+                "займёт меньше минуты."
+            )
+            failed_charge_msg_en = ("Your paid period has ended and the VPN is off.\n\n"
+                                    "To reconnect, tap «Renew subscription» — it takes less than a minute.")
         if not deactivate_on_failure:
             logger.warning(
                 f"{user.user_id}: ранняя попытка продления не удалась, "
@@ -658,11 +901,15 @@ class SubscriptionManager:
             return False
 
         keyboard = [
-            [Button.inline("Подключить оплату", data="add_subscription")]
+            [Button.inline("Продлить подписку" if user.paid_periods else "Подключить оплату",
+                           data="add_subscription")]
         ]
+        keyboard_en = [[Button.inline("Renew subscription" if user.paid_periods else "Subscribe",
+                                      data="add_subscription")]]
         await broadcast_message(
             vpn_bot, self.user_manager, [user.user_id], failed_charge_msg,
-            "подписка закончилась", buttons=keyboard
+            "подписка закончилась", buttons=keyboard,
+            message_en=failed_charge_msg_en, buttons_en=keyboard_en
         )
         if user.payment_token:
             self.user_manager.update_user(user.user_id, payment_token=None)
@@ -748,9 +995,13 @@ class SubscriptionManager:
             await broadcast_message(
                 vpn_bot, self.user_manager, remind_ids,
                 "⚠️ **Ваша подписка истекает завтра**\n\n"
-                "Чтобы не потерять доступ, продлите её: отправьте команду "
-                "**/pay** и выберите тариф. Занимает меньше минуты.",
-                "подписка истекает завтра"
+                "Чтобы не потерять доступ, нажмите «Продлить подписку» — "
+                "займёт меньше минуты.",
+                "подписка истекает завтра",
+                buttons=[[Button.inline("Продлить подписку", data="add_subscription")]],
+                message_en=("⚠️ **Your subscription expires tomorrow**\n\n"
+                            "To keep access, tap «Renew subscription» — it takes less than a minute."),
+                buttons_en=[[Button.inline("Renew subscription", data="add_subscription")]],
             )
         logger.info('process_payments успешно завершена')
 

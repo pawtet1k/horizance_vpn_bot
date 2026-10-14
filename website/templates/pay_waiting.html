@@ -1,24 +1,24 @@
 {% extends "base.html" %}
 
-{% block title %}Ожидаем подтверждение оплаты — Horizance VPN{% endblock %}
-{% block meta_description %}Ожидаем подтверждение оплаты от банка.{% endblock %}
+{% block title %}{{ t('Ожидаем подтверждение оплаты', 'Waiting for payment confirmation') }} — Horizance VPN{% endblock %}
+{% block meta_description %}{{ t('Ожидаем подтверждение оплаты от банка.', 'Waiting for the bank to confirm the payment.') }}{% endblock %}
 {% block canonical %}https://horizancevpn.com/pay/waiting{% endblock %}
 {% block robots %}noindex, nofollow{% endblock %}
 
 {% block content %}
 <section class="max-w-2xl mx-auto px-6 py-12">
 
-  <h1 class="text-2xl font-bold tracking-tight mb-6">Оплата подписки</h1>
+  <h1 class="text-2xl font-bold tracking-tight mb-6">{{ t('Оплата подписки', 'Subscription payment') }}</h1>
 
   <div id="pay-waiting-state"
        data-baseline-paid-periods="{{ baseline_paid_periods }}"
        class="bg-surface border border-line rounded-2xl p-6 leading-relaxed text-ink2 flex items-center gap-3">
     <span class="w-4 h-4 border-2 border-mute border-t-transparent rounded-full animate-spin flex-shrink-0" aria-hidden="true"></span>
-    <span>Ожидаем подтверждение оплаты от банка — обычно это занимает не больше минуты…</span>
+    <span>{{ t('Ожидаем подтверждение оплаты от банка — обычно это занимает не больше минуты…', 'Waiting for payment confirmation — this usually takes under a minute…') }}</span>
   </div>
 
   <a href="/dashboard" class="text-dim text-sm hover:text-ink transition-colors mt-6 inline-flex items-center gap-2">
-    <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> В личный кабинет
+    <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> {{ t('В личный кабинет', 'Back to account') }}
   </a>
 
 </section>
@@ -60,14 +60,13 @@ function renderFinalState(kind) {
 
   if (kind === "success") {
     icon.className = "fa-solid fa-circle-check text-emerald-400";
-    text.textContent = " Оплата прошла успешно, подписка активирована!";
+    text.textContent = " " + {{ t('Оплата прошла успешно, подписка активирована!', 'Payment received, your subscription is active!') | tojson }};
   } else if (kind === "failed") {
     icon.className = "fa-solid fa-circle-xmark text-rose-400";
-    text.textContent = " Оплата не прошла. Попробуйте ещё раз через личный кабинет.";
+    text.textContent = " " + {{ t('Оплата не прошла. Попробуйте ещё раз через личный кабинет.', 'The payment failed. Please try again from your account.') | tojson }};
   } else {
     icon.className = "fa-solid fa-clock text-dim";
-    text.textContent = " Подтверждение задерживается — обновите эту страницу через пару минут " +
-      "или проверьте статус в личном кабинете.";
+    text.textContent = " " + {{ t('Подтверждение задерживается — обновите эту страницу через пару минут или проверьте статус в личном кабинете.', 'Confirmation is delayed — refresh this page in a couple of minutes or check your account.') | tojson }};
   }
 
   container.append(icon, text);

@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 import credentials
 from utils import Campaign, days_since
@@ -98,6 +99,7 @@ yearly_price = 999
 ROUTER_TRAFFIC_LIMIT_GB = 300
 ROUTER_DEVICE = "Router"
 ROUTER_LABEL = "Роутер"
+ROUTER_LABEL_EN = "Router"
 ROUTER_PERIOD_DAYS = 30
 # Выгода годовой подписки против 12 месячных — показывается при выборе тарифа (06.10.26: годовую почти
 # не выбирали, потому что в момент выбора выгоды не было видно).
@@ -111,6 +113,28 @@ referral_free_days = 30
 # кто пришёл с сайта (BOT_LINK со start=183640993).
 OWNER_TELEGRAM_ID = 183640993
 REFERRAL_EXCLUDED_IDS = {OWNER_TELEGRAM_ID}
+# Ссылки сайта на бота: t.me/<бот>?start=site_<страница> (14.10.26; раньше у всех был start=183640993 и источник не был
+# виден). Бот пишет страницу в лог «Пришёл с сайта: <страница>» и ставит пригласившим владельца — как раньше, на этом
+# держится «ссылка с сайта» в stats_growth.py. Старые ссылки с start=183640993 (кэш, заголовки подписки в Happ) работают.
+BOT_URL = "https://t.me/Horizance_vpn_bot"
+SITE_START_PREFIX = "site_"
+
+
+def site_bot_link(src: str) -> str:
+    """Ссылка на бота с меткой страницы сайта; payload в Telegram — до 64 символов [A-Za-z0-9_-]."""
+    return f"{BOT_URL}?start={SITE_START_PREFIX}{re.sub(r'[^A-Za-z0-9_-]', '_', src)[:64 - len(SITE_START_PREFIX)]}"
+# Вход на сайт через бота (routers/auth.py → bot.handle_web_login): ссылка t.me/…?start=login_<token>.
+# Токен живёт WEB_LOGIN_TTL секунд (сайт сам показывает новый QR), подтверждённый вход сайт забирает
+# за WEB_LOGIN_APPROVED_TTL секунд — иначе он сгорает.
+WEB_LOGIN_PREFIX = "login_"
+WEB_LOGIN_TTL = 180
+WEB_LOGIN_APPROVED_TTL = 300
+
+
+def web_login_link(token: str) -> str:
+    return f"{BOT_URL}?start={WEB_LOGIN_PREFIX}{token}"
+
+
 # Промо для вернувшихся неактивных: слово в чат боту (main.handle_message) —
 # доступ на PROMO_DAYS от сегодняшнего дня, один раз на человека.
 PROMO_WORD = "живой"
@@ -123,6 +147,21 @@ TRIAL_IP_LIMIT = 3
 TRIAL_WINDOW_DAYS = 30
 # Сколько разных устройств (hwid из Happ) может брать одну подписку через /sub.
 DEVICE_LIMIT = 3
+# Доп. устройства (владелец, 13.10.26) — опция подписки, как add-on в SaaS (co-terming): +EXTRA_DEVICES_COUNT к лимиту,
+# продлевается вместе с подпиской одним платежом (месяц 99 + 99 ₽, год 999 + 999 ₽ — опция стоит как ещё один такой же
+# тариф). Подключил посреди оплаченного срока — сразу доплата только за остаток срока (пропорционально дням), и
+# дальше одна дата продления. На триале — опция добавляется к первой оплате. Отключить можно в /devices: устройства
+# останутся до конца оплаченного срока, со следующего продления — без опции.
+EXTRA_DEVICES_COUNT = 3
+EXTRA_DEVICES_PRICE = 99          # ₽ за месяц; за год — в той же пропорции, что тариф (get_extra_devices_price)
+# Минимальная доплата за остаток срока: меньше этих сумм провайдер счёт не создаст (у NOWPayments минимум
+# $1.72–13.7 в зависимости от монеты, см. CRYPTO_PAY_CURRENCY ниже) — берём минимум, а не отказываем.
+EXTRA_DEVICES_MIN_CHARGE_RUB = 10
+EXTRA_DEVICES_MIN_CHARGE_USD = 1.8
+
+
+def get_extra_devices_price(plan_price: int) -> int:
+    return round(plan_price * EXTRA_DEVICES_PRICE / default_price) if plan_price else 0
 # Устройства без лимитов — телефон владельца, на нём тестируются триалы и
 # чужие аккаунты.
 DEVICE_LIMIT_EXEMPT_HWIDS: set[str] = {"layw7phlg0yd2ip2"}
@@ -144,6 +183,24 @@ WATCHDOG_WINDOW_MIN = 15
 WATCHDOG_WARN_IPS = 10        # больше — warning в лог
 WATCHDOG_CUT_IPS = 20         # больше — ключ отключается + письмо
 NODE_ALERT_COOLDOWN_SEC = 3600
+# Пинг UDM Pay (node_monitor.run_udmpay_watch)
+UDMPAY_WATCH_INTERVAL_SEC = 60
+# INCY (iPhone) понимает тот же профиль маршрутизации, что Happ (поля DirectSites/ProxySites…), только со схемой
+# incy://routing/onadd/ (документация INCY-DEV/incy-docs, ru/dev-docs/routing.md). 13.10.26 на устройстве не проверено —
+# пока выключено для всех; проверка: /sub/<uuid>?incy_routing=1 из INCY. Заработает — поставить True.
+INCY_ROUTING_ENABLED = True  # включено 14.10.26: владелец проверил на iPhone — Яндекс видит реальный IP, Google — IP VPN
+# Кто пытался оплатить во время сбоя UDM Pay и состояние сбоя — см. payment_outage.py
+# Причина сбоя для клиентов (ru, en) — показывается, только пока сбой объявлен (payment_outage.is_down()).
+# 11.10.26: атаки дронов на ЦОД Яндекса, UDM Pay в Yandex Cloud (AS200350). После сбоя — очистить: ("", "").
+# 14.10.26: UDM Pay переехал из Яндекс Облака, но наш магазин после восстановления не находится (HTTP 404 Account).
+# 14.10.26 поддержка UDM Pay владельцу: всё восстановят 14–15 октября — дата в тексте; не заработает к 16.10 — поправить.
+PAYMENT_OUTAGE_REASON = (
+    "после атак беспилотников на дата-центры Яндекса сервисы нашего платёжного партнёра пока работают нестабильно. "
+    "Партнёр обещает полностью восстановить работу 14–15 октября",
+    "after drone attacks on the Yandex data centers, our payment provider's services are still unstable. "
+    "The provider expects to fully restore them on October 14–15",
+)
+PAYMENT_OUTAGE_PATH = str(Path(__file__).resolve().parent / "payment_outage.json")
 
 WEBSITE_BASE_URL = "https://horizancevpn.com"
 
@@ -256,12 +313,27 @@ NOTIFICATION_CAMPAIGNS = [
     Campaign(
         _happ_setup_issue,
         "👋 Не получается настроить VPN? Напишите /help — поможем за пару минут! 🚀",
-        "не установлен Happ"
+        "не установлен Happ",
+        "👋 Having trouble setting up the VPN? Send /help — we'll help in a couple of minutes! 🚀",
     ),
     Campaign(
         _vpn_not_enabled,
-        "🔌 Приложение установлено, но VPN выключен. Включите его в Happ 🔘. "
+        "🔌 Приложение установлено, но VPN выключен. Включите его кнопкой подключения в приложении 🔘. "
         "Не получается — напишите /help!",
-        "VPN не включен"
+        "VPN не включен",
+        "🔌 The app is installed, but the VPN is off. Turn it on with the connect button in the app 🔘. "
+        "Doesn't work — send /help!",
     ),
 ]
+
+# Тест транспорта XHTTP (10.10.26): у этих подписок первой строкой идёт NL на порту 8443 через XHTTP
+# (инбаунд vless_xhttp, stream-one, есть в config.json NL с 25.08). Kosta_Kibardin (225268791): мобильный МТС,
+# Telegram-файлы по gRPC не уходят. uuid надо вручную прописать в инбаунд (xray api adu --tag=vless_xhttp,
+# port 8443) и снять после теста — node_monitor этот инбаунд не обслуживает.
+XHTTP_TEST_UUIDS: set[str] = {"b8853d1c-bf7d-470a-a267-b5138b64b507"}
+XHTTP_TEST_HOST = "193.233.127.32"
+
+# Брошенная оплата: заказ создан, а через столько минут ни он, ни следующие не оплачены → владельцу в Telegram и на
+# почту. 10.10.26 выяснилось, что Shailesh 18.09 четыре раза пытался оплатить СБП (иностранец, СБП — только
+# российские банки) и об этом никто не узнал: сообщали только об успешных оплатах.
+ABANDONED_ORDER_MINUTES = 30

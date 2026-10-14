@@ -17,6 +17,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 import nowpayments
+import whop
 import udmpay
 from db import UserManager
 from messenger import TelegramApiMessenger
@@ -168,4 +169,37 @@ async def nowpayments_webhook(request: Request):
     else:
         logger.info(f"nowpayments webhook: платёж {order_id} ещё не финализирован (status={status})")
 
+    return JSONResponse({"ok": True})
+
+
+@router.post("/api/payments/whop/webhook")
+async def whop_webhook(request: Request):
+    """Whop (карты для иностранцев, whop.py). Вебхуки подписаны (Standard Webhooks). Вебхуки компании Horizance LLC
+    общие с horizance.com — чужие события (без metadata.service == "vpn") подтверждаем 200 и пропускаем."""
+    client_ip = get_client_ip(request)
+    if is_rate_limited(f"whop_webhook:{client_ip}", max_calls=30, window_seconds=60):
+        return JSONResponse({"ok": False}, status_code=429)
+    payload = await request.body()
+    event = whop.verify_webhook(payload, request.headers)
+    if event is None:
+        logger.warning(f"whop webhook: неверная или отсутствующая подпись, ip={client_ip}")
+        return JSONResponse({"ok": False}, status_code=401)
+    etype = event.get("type") or event.get("event") or ""
+    data = event.get("data") if isinstance(event.get("data"), dict) else {}
+    meta = data.get("metadata") if isinstance(data.get("metadata"), dict) else {}
+    if meta.get("service") != "vpn":
+        return JSONResponse({"ok": True})
+    order_id = str(meta.get("order") or "")
+    user = _db.get_user_by_order(order_id) if order_id else None
+    if user is None:
+        logger.warning(f"whop webhook: неизвестный заказ {order_id!r} ({etype})")
+        return JSONResponse({"ok": True})
+    messenger = TelegramApiMessenger()
+    if etype in ("payment.succeeded", "payment_succeeded"):
+        await _subscriptions.activate_paid_subscription(messenger, user.user_id, order_id, provider="Whop")
+    elif etype in ("payment.failed", "payment_failed"):
+        await _subscriptions.fail_pending_payment(messenger, user.user_id, order_id,
+                                                  "card payment declined", provider="Whop")
+    else:
+        logger.info(f"whop webhook: {etype} для заказа {order_id} — без действий")
     return JSONResponse({"ok": True})

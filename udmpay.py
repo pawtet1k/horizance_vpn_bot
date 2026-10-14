@@ -85,7 +85,7 @@ def _return_link(baseline_paid_periods: int) -> str:
     return f"{settings.WEBSITE_BASE_URL}{RETURN_PATH}?baseline={baseline_paid_periods}"
 
 
-async def _post(path: str, body: dict) -> dict:
+async def _post(path: str, body: dict, log_errors: bool = True) -> dict:
     body = {k: v for k, v in body.items() if v is not None}
     body["hash"] = sign(body)
     url = _base_url() + path
@@ -100,7 +100,8 @@ async def _post(path: str, body: dict) -> dict:
 
     if response.status_code >= 400 or payload.get("status") == 0:
         message = payload.get("message", "Ошибка UDM Pay")
-        logger.error(f"UDM Pay {path}: HTTP {response.status_code}, ответ={payload}")
+        if log_errors:
+            logger.error(f"UDM Pay {path}: HTTP {response.status_code}, ответ={payload}")
         raise UdmPayError(message, response.status_code, payload)
 
     return payload
@@ -116,7 +117,7 @@ def _order_products(description: str, price: int) -> list[dict]:
 
 
 async def create_subscription_with_payment(
-    *, ext_order_id: str, price: int, description: str, baseline_paid_periods: int
+    *, ext_order_id: str, price: int, description: str, baseline_paid_periods: int, return_link: str | None = None
 ) -> dict:
     """Первый платёж: привязка подписки СБП + оплата одним заказом.
     Возвращает SbpSubscriptionCreateWithPaymentResource
@@ -127,7 +128,7 @@ async def create_subscription_with_payment(
         "paymentPurpose": description,
         "products": _order_products(description, price),
         "sum": price,
-        "returnLink": _return_link(baseline_paid_periods),
+        "returnLink": return_link or _return_link(baseline_paid_periods),
         "webhookLink": _webhook_link(),
         "subscriptionPurpose": description,
         "subscriptionWebhookLink": _subscription_webhook_link(),
@@ -161,6 +162,32 @@ async def get_order_status(order_id: str) -> dict:
     body = {"login": credentials.UDMPAY_LOGIN, "orderId": order_id}
     payload = await _post("/order/status", body)
     return payload.get("data", payload)
+
+
+# 14.10.26 после восстановления UDM Pay отвечал на любой запрос нашего логина HTTP 404 «No query results for model
+# [App\Models\Accounts\Account]» — хост жив, а магазина нет. Пинг хоста этого не видит, поэтому проверяем запросом
+# с нашим логином.
+ACCOUNT_MISSING_MARK = "Accounts\\Account"
+
+
+def is_account_missing(error: "UdmPayError") -> bool:
+    return ACCOUNT_MISSING_MARK in str(error)
+
+
+async def health_check(order_id: str | None) -> str:
+    """'' — UDM Pay принимает наш логин; иначе короткая причина. order_id — любой наш старый заказ: нужен только
+    запрос, подписанный нашим логином (заказ не найден, а аккаунт есть — это норма)."""
+    try:
+        await _post("/order/status", {"login": credentials.UDMPAY_LOGIN, "orderId": order_id or "health-check"},
+                    log_errors=False)
+    except UdmPayError as e:
+        if is_account_missing(e):
+            return "account_missing"
+        if (e.status_code or 0) >= 500:
+            return f"HTTP {e.status_code}"
+    except httpx.HTTPError as e:
+        return type(e).__name__
+    return ""
 
 
 async def get_subscription_status(subscription_uid: str) -> dict:

@@ -10,7 +10,8 @@ import credentials
 import httpx
 from my_logger import logger
 
-Campaign = namedtuple('Campaign', ['predicate', 'message', 'name'])
+# message_en — тот же текст по-английски для иностранцев (i18n.is_english)
+Campaign = namedtuple('Campaign', ['predicate', 'message', 'name', 'message_en'], defaults=(None,))
 
 
 def generate_qrcode(link):
@@ -86,21 +87,30 @@ async def check_download_links(download_urls: dict[str, str]) -> None:
     else:
         logger.info("Проверка ссылок на скачивание клиента: все рабочие.")
 
-async def send_telegram_api_message(user_id: int, text: str) -> bool:
+async def send_telegram_api_message(user_id: int, text: str, buttons: list | None = None,
+                                    parse_mode: str | None = "Markdown") -> bool:
     """Отправка сообщения пользователю напрямую через Telegram Bot API
     (a не через живую сессию Telethon). Нужна процессам без подключённого
-    TelegramClient — например, вебхуку оплаты UDM Pay на сайте."""
+    TelegramClient — например, вебхуку оплаты UDM Pay на сайте.
+
+    Каждое отправленное сообщение пишется в лог строкой «Ответ техподдержки для <id>: <текст>» — переписка
+    с клиентом должна быть видна будущим агентам (решение владельца 11.10.26). buttons — список рядов
+    [{"text": ..., "callback_data": ...} | {"text": ..., "url": ...}]."""
     url = f"https://api.telegram.org/bot{credentials.BOT_TOKEN}/sendMessage"
+    payload = {"chat_id": user_id, "text": text}
+    if parse_mode:
+        payload["parse_mode"] = parse_mode
+    if buttons:
+        payload["reply_markup"] = {"inline_keyboard": buttons}
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            response = await client.post(url, json={
-                "chat_id": user_id,
-                "text": text,
-                "parse_mode": "Markdown",
-            })
+            response = await client.post(url, json=payload)
         if response.status_code != 200:
             logger.error(f"{user_id}: Telegram Bot API sendMessage HTTP {response.status_code}: {response.text}")
+            logger.info(f"Ответ техподдержки для {user_id} НЕ ДОСТАВЛЕН (HTTP {response.status_code}): {text}")
             return False
+        labels = " | ".join(b["text"] for row in (buttons or []) for b in row)
+        logger.info(f"Ответ техподдержки для {user_id}: {text}" + (f" [кнопки: {labels}]" if labels else ""))
         return True
     except Exception as e:
         logger.error(f"{user_id}: ошибка Telegram Bot API sendMessage: {e}")
@@ -131,17 +141,21 @@ def _record_notification(user_manager, user, campaign_name: str) -> None:
     )
 
 async def broadcast_message(
-    vpn_bot, user_manager, user_ids, message, campaign_name, buttons=None
+    vpn_bot, user_manager, user_ids, message, campaign_name, buttons=None,
+    message_en=None, buttons_en=None
 ):
+    from i18n import is_english  # локально: i18n тянет db
     sent, skipped, failed = 0, 0, 0
     for user_id in user_ids:
         user = user_manager.get_user(user_id)
         if not _should_run_campaign_today(user, campaign_name):
             skipped += 1
             continue
+        english = message_en is not None and is_english(user)
         try:
             await vpn_bot.send_message(
-                user_id, message, buttons=buttons, parse_mode='md'
+                user_id, message_en if english else message,
+                buttons=(buttons_en or buttons) if english else buttons, parse_mode='md'
             )
             _record_notification(user_manager, user, campaign_name)
             sent += 1
@@ -163,7 +177,8 @@ async def run_notification_campaigns(vpn_bot, user_manager, campaigns):
         ]
         if target_ids:
             await broadcast_message(
-                vpn_bot, user_manager, target_ids, campaign.message, campaign.name
+                vpn_bot, user_manager, target_ids, campaign.message, campaign.name,
+                message_en=campaign.message_en
             )
 
 async def ping(vpn_bot):

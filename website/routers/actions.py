@@ -7,7 +7,10 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
 import bot
+import device_guard
 import settings
+import credentials
+import whop
 from db import UserManager
 from messenger import CapturingMessenger
 from models import UserStatus
@@ -37,7 +40,13 @@ def _current_user(request: Request):
     user_id = request.session.get("user_id")
     if not user_id:
         return None, None
-    return user_id, _db.get_user(user_id)
+    user = _db.get_user(user_id)
+    if user is not None and not user.language and getattr(request.state, "en", False):
+        # вход виджетом языка не даёт; сайт определил английский — запоминаем, чтобы и бот, и инструкции
+        # настройки (их собирает общий код бота) шли этому человеку по-английски (i18n.is_english)
+        _db.update_user(user_id, language="en")
+        user.language = "en"
+    return user_id, user
 
 
 def _render_messages(request: Request, title: str, messenger: CapturingMessenger,
@@ -63,7 +72,7 @@ async def api_subscription(request: Request):
         ).isoformat()
     return JSONResponse({
         "status": user.status.value,
-        "status_label": user.status.label_ru(),
+        "status_label": user.status.label_en() if request.state.en else user.status.label_ru(),
         "is_active": is_active,
         "expires_at": expires_at,
         "auto_renew": user.payment_token is not None,
@@ -103,7 +112,8 @@ async def pay_page(request: Request):
         plan: price for plan, price in PLAN_PRICES.items()
         if not (user.payment_token and price == user.price)
     }
-    return templates.TemplateResponse(request, "pay_select_plan.html", {"plans": plans})
+    return templates.TemplateResponse(request, "pay_select_plan.html", {
+        "plans": plans, "extra": bool(user.extra_devices)})
 
 
 @router.get("/pay/waiting")
@@ -135,12 +145,88 @@ async def pay_plan(request: Request, plan: str):
 
     _db.update_user(user_id, price=PLAN_PRICES[plan])
     user = _db.get_user(user_id)
+    user.force_lang = "en" if request.state.en else "ru"  # ответы платёжки — на языке страницы
 
     messenger = CapturingMessenger()
-    created = await _subscriptions.add_subscription(messenger, user)
+    # 11.10.26: криптовалюта и на сайте. Раньше /pay/{plan} знал только СБП, и иностранец (Shailesh, 18.09)
+    # четыре раза пытался оплатить СБП, которая работает только с российскими банками.
+    method = request.query_params.get("method")
+    crypto = method == "crypto" and settings.NOWPAYMENTS_ENABLED
+    if method == "card" and whop.enabled():  # Whop — только иностранцам (pay_select_plan.html)
+        created = await _subscriptions.add_card_subscription(
+            messenger, user, redirect_url=f"https://{credentials.SUBSCRIPTION_DOMAIN}/dashboard")
+    elif crypto:
+        created = await _subscriptions.add_crypto_subscription(messenger, user)
+    else:
+        created = await _subscriptions.add_subscription(messenger, user)
     return _render_messages(
-        request, "Оплата подписки", messenger,
-        retry_url=None if created else f"/pay/{plan}",
+        request, "Payment" if request.state.en else "Оплата подписки", messenger,
+        retry_url=None if created else f"/pay/{plan}" + (f"?method={method}" if method in ("crypto", "card") else ""),
+    )
+
+
+# ---------- /devices: устройства подписки и докупка (как /devices в боте, 13.10.26) ----------
+@router.get("/devices")
+async def devices_page(request: Request):
+    user_id, user = _current_user(request)
+    if not user_id or user is None:
+        return RedirectResponse(url="/auth?next=/devices")
+    active, removed, limit = bot.devices_summary(user)
+    return templates.TemplateResponse(request, "devices.html", {
+        "active": active, "removed": removed, "limit": limit,
+        "extra_status": bot.extra_devices_status(user),
+        "extra_on": bool(user.extra_devices),
+        "extra_paid": device_guard.extra_devices_active(user.extra_devices_until),
+        "quote": _subscriptions.extra_devices_quote(user),
+        "error": request.query_params.get("error"),
+    })
+
+
+@router.post("/devices/remove")
+async def devices_remove(request: Request, hwid: str = Form(...)):
+    user_id, user = _current_user(request)
+    if not user_id or user is None:
+        return RedirectResponse(url="/auth?next=/devices", status_code=303)
+    device_guard.remove_device(user_id, hwid)
+    return RedirectResponse(url="/devices", status_code=303)
+
+
+@router.post("/devices/restore")
+async def devices_restore(request: Request, hwid: str = Form(...)):
+    user_id, user = _current_user(request)
+    if not user_id or user is None:
+        return RedirectResponse(url="/auth?next=/devices", status_code=303)
+    refusal = device_guard.restore_device(vars(user), hwid)
+    return RedirectResponse(url="/devices?error=limit" if refusal == "device_limit" else "/devices", status_code=303)
+
+
+@router.post("/devices/extra/{action}")
+async def devices_extra_toggle(request: Request, action: str):
+    """on/off — продлевать ли опцию «доп. устройства»; with_subscription — добавить её к оплате подписки (триал)."""
+    user_id, user = _current_user(request)
+    if not user_id or user is None:
+        return RedirectResponse(url="/auth?next=/devices", status_code=303)
+    if action in ("on", "off", "with_subscription"):
+        _subscriptions.set_extra_devices(user, action != "off")
+    return RedirectResponse(url="/pay" if action == "with_subscription" else "/devices", status_code=303)
+
+
+@router.get("/devices/extra")
+async def devices_extra(request: Request):
+    """Доплата за остаток оплаченного срока (quote mode='prorate')."""
+    user_id, user = _current_user(request)
+    if not user_id or user is None:
+        return RedirectResponse(url="/auth?next=/devices")
+    method = request.query_params.get("method")
+    if method not in ("sbp", "crypto", "card") or _subscriptions.extra_devices_quote(user)["mode"] != "prorate":
+        return RedirectResponse(url="/devices")
+    user.force_lang = "en" if request.state.en else "ru"  # ответы платёжки — на языке страницы
+    messenger = CapturingMessenger()
+    created = await _subscriptions.buy_extra_devices(
+        messenger, user, method, return_url=f"https://{credentials.SUBSCRIPTION_DOMAIN}/devices")
+    return _render_messages(
+        request, "Extra devices" if request.state.en else "Доп. устройства", messenger,
+        retry_url=None if created else f"/devices/extra?method={method}",
     )
 
 

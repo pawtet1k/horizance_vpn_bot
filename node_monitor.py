@@ -19,6 +19,7 @@ Ubuntu запускает motd, а он на US однажды съел 324 МБ
 Письма — на settings.NOTIFY_EMAIL, не чаще NODE_ALERT_COOLDOWN_SEC на ключ.
 """
 import asyncio
+import csv
 import json
 import shlex
 import time
@@ -26,14 +27,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import asyncssh
+import httpx
 
 import credentials
 import device_guard
+import payment_outage
 import settings
-from models import trial_expired
+from models import UserStatus, trial_expired
+from i18n import is_english, tr
 from my_logger import logger
 from restore_users import clients_to_restore
-from utils import send_email
+from utils import send_email, send_telegram_api_message
 from vpn import ssh_connect_kwargs
 
 # интерфейс по умолчанию, его счётчики принятых/отправленных байт (rx/tx — то
@@ -55,6 +59,9 @@ _WATCHDOG_SCRIPT = (
     "split($4,a,\":\"); k=e\" \"a[1]; if(!(k in s)){{s[k]=1; n[e]++}}}} "
     "END{{for(e in n) if(n[e]>=3) print e, n[e]}}'"
 )
+
+
+PROVIDER_LABELS = {"UDM Pay": "СБП", "NOWPayments": "криптовалюта", "Whop": "карта"}
 
 
 class NodeMonitor:
@@ -105,6 +112,47 @@ class NodeMonitor:
             await self._tell(user.user_id,
                              f"Лимит роутера — {settings.ROUTER_TRAFFIC_LIMIT_GB} ГБ за {settings.ROUTER_PERIOD_DAYS} "
                              f"дней — исчерпан. Роутер снова заработает {end:%d.%m}.")
+
+    async def _abandoned_orders(self) -> None:
+        """Брошенная оплата — см. settings.ABANDONED_ORDER_MINUTES. Окно сутки: дольше смысла звать уже нет."""
+        rows = self.users.execute_query(
+            "SELECT o.user_id, COUNT(*) AS n, MAX(o.order_id) AS last_order, MIN(o.created_at) AS first_at, "
+            "MAX(o.created_at) AS last_at, GROUP_CONCAT(DISTINCT o.provider) AS providers "
+            "FROM payment_orders o WHERE o.paid_at IS NULL AND o.abandoned_alerted_at IS NULL "
+            "AND o.created_at >= datetime('now', '-1 day') AND o.created_at <= datetime('now', ?) "
+            "AND NOT EXISTS (SELECT 1 FROM payment_orders p WHERE p.user_id = o.user_id "
+            "AND p.paid_at IS NOT NULL AND p.created_at >= o.created_at) GROUP BY o.user_id",
+            (f"-{settings.ABANDONED_ORDER_MINUTES} minutes",), fetchall=True,
+        ) or []
+        for r in rows:
+            key = f"abandoned:{r['user_id']}:{r['last_order']}"
+            # отметка в самих заказах — одно письмо на заказ, и после рестарта бота тоже (11.10.26 повторялись)
+            self.users.execute_query(
+                "UPDATE payment_orders SET abandoned_alerted_at = datetime('now') WHERE user_id = ? "
+                "AND paid_at IS NULL AND abandoned_alerted_at IS NULL AND created_at <= datetime('now', ?)",
+                (r["user_id"], f"-{settings.ABANDONED_ORDER_MINUTES} minutes"),
+            )
+            user = self.users.get_user(r["user_id"])
+            who = (f"@{user.username or '—'} ({user.first_name or ''}), язык {user.language or '?'}, "
+                   f"статус {getattr(user.status, 'value', user.status)}, оплачено месяцев {user.paid_periods}"
+                   if user else "нет в users (сайт?)")
+            methods = ", ".join(PROVIDER_LABELS.get(p, p) for p in (r["providers"] or "").split(","))
+            text = (f"Брошенная оплата: {r['user_id']} {who}. Создал ссылку на оплату ({methods}) "
+                    f"{r['first_at'][:16]} UTC и не оплатил за {settings.ABANDONED_ORDER_MINUTES} мин"
+                    + (f", заказов: {r['n']}" if r['n'] > 1 else "") + ".")
+            # подсказка — только если она про этого человека (14.10.26 «иностранцу — крипту» приходило про
+            # русскую Марию, которая и так ушла в крипту, потому что СБП не работала)
+            first_ts = datetime.strptime(r["first_at"][:19], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc).timestamp()
+            if payment_outage.failed_between(r["user_id"], first_ts - 2 * 3600, time.time()):
+                text += " Перед этим СБП у него не сработала (сбой UDM Pay)."
+            if user and is_english(user) and "NOWPayments" not in (r["providers"] or ""):
+                text += " Иностранец: СБП только для российских банков — предложить криптовалюту или карту."
+            self._alert(key, f"Horizance VPN: брошенная оплата {r['user_id']}", text)
+            if self.bot:
+                try:
+                    await self.bot.send_message(settings.OWNER_TELEGRAM_ID, "💳 " + text)
+                except Exception as e:
+                    logger.error(f"node_monitor: не удалось сообщить владельцу о брошенной оплате: {e}")
 
     async def _tell(self, user_id, text: str) -> None:
         if not self.bot:
@@ -295,10 +343,12 @@ class NodeMonitor:
                 )
                 how = "Триал закрыт."
             else:
-                # платного не трогаем в базе (статус, оплату) — только бан
+                # пользователя бота не трогаем в базе (статус, оплату) — только бан
                 # ключа: мониторинг его не вернёт, /sub отдаёт заглушку
                 device_guard.ban("user", email, f"сторож: {n} IP за {settings.WATCHDOG_WINDOW_MIN} мин")
-                how = ("Платный пользователь: ключ в бан-листе (таблица banned, kind='user'). "
+                user = self.users.get_user(int(email))
+                who = f"статус {getattr(user.status, 'value', user.status)}, оплачено месяцев {user.paid_periods}" if user else "нет в users"
+                how = (f"Пользователь бота ({who}): ключ в бан-листе (таблица banned, kind='user'). "
                        "Вернуть — удалить эту строку, мониторинг сам зарегистрирует его обратно.")
             await asyncio.to_thread(
                 self._alert, f"watchdog:{email}",
@@ -307,6 +357,102 @@ class NodeMonitor:
                 f"подключались {n} разных IP (порог отключения {settings.WATCHDOG_CUT_IPS}). "
                 f"{how}\nОбычно у одного человека 1–5 IP.",
             )
+
+    async def notify_recovered(self) -> list[int]:
+        """Оплата заработала: пишем всем, кто пытался оплатить за время сбоя (СБП — payment_outage.users,
+        крипта и прочее — неоплаченные заказы в payment_orders с даты since), если они с тех пор не оплатили."""
+        from bot import plan_choice_buttons  # локально: bot тянет Telethon и много лишнего
+        data = payment_outage.load()
+        since = data["since"] or "2026-10-10"
+        rows = self.users.execute_query(
+            "SELECT DISTINCT user_id FROM payment_orders WHERE paid_at IS NULL AND created_at >= ?",
+            (since,), fetchall=True,
+        ) or []
+        ids = (set(data["users"]) | {r["user_id"] for r in rows}) - {settings.OWNER_TELEGRAM_ID}
+        sent = []
+        for uid in sorted(ids):
+            user = self.users.get_user(uid)
+            if user is None or self._paid_since(uid, since):
+                continue
+            en = is_english(user)
+            rows_btn = [[{"text": b.text, "callback_data": b.data.decode()}] for row in plan_choice_buttons(english=en, extra=bool(user.extra_devices))
+                        for b in row]
+            text = tr(user, "Оплата снова работает. Выберите тариф ниже — и вам придёт ссылка на оплату.",
+                      "Payments are working again. Choose a plan below and you will get a payment link.")
+            if await send_telegram_api_message(uid, text, buttons=rows_btn, parse_mode=None):
+                sent.append(uid)
+        for item in data["queued"]:
+            if await send_telegram_api_message(item["user_id"], item["text"], parse_mode=None):
+                sent.append(item["user_id"])
+        data["queued"] = []
+        data["users"] = []
+        data["since"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        payment_outage.save(data)
+        return sent
+
+    def _paid_since(self, user_id: int, since: str) -> bool:
+        return bool(self.users.execute_query(
+            "SELECT 1 FROM payment_orders WHERE user_id = ? AND paid_at IS NOT NULL AND paid_at >= ?",
+            (user_id, since), fetchone=True))
+
+    async def run_udmpay_watch(self) -> None:
+        """Пинг UDM Pay раз в UDMPAY_WATCH_INTERVAL_SEC: письмо владельцу, когда лёг и когда поднялся, и рассылка
+        тем, кто пытался оплатить, когда он поднялся. Лежит = нет HTTP-ответа вообще (код ответа корня API
+        в рабочем режиме не проверен — на 5xx не опираемся, чтобы не объявить вечный сбой); два промаха подряд (и два
+        успеха подряд для «снова онлайн»), чтобы не реагировать на один сбой. Состояние хранится в payment_outage.json
+        (переживает рестарт бота). Каждая проверка пишется в my_logger/stats/udmpay_uptime.csv.
+        Проверка — запрос /order/status с нашим логином (udmpay.health_check), а не пинг хоста: 14.10.26 хост ожил,
+        а магазина в нём не было (404 Accounts\\Account), и пинг разослал «оплата снова работает» зря."""
+        import udmpay
+        url = udmpay._base_url()
+        log = Path(__file__).resolve().parent / "my_logger" / "stats" / "udmpay_uptime.csv"
+        misses = oks = 0
+        while True:
+            t0, code = time.time(), ""
+            last = self.users.execute_query(
+                "SELECT order_id FROM payment_orders WHERE provider = 'UDM Pay' AND paid_at IS NOT NULL "
+                "ORDER BY paid_at DESC LIMIT 1", fetchone=True)
+            try:
+                err = await udmpay.health_check(last["order_id"] if last else None)
+            except Exception as e:  # пинг не должен ронять цикл
+                err = type(e).__name__
+            try:
+                new = not log.exists()
+                with log.open("a", newline="") as f:
+                    w = csv.writer(f)
+                    if new:
+                        w.writerow(["utc", "ok", "error", "sec", "http"])
+                    w.writerow([datetime.now(timezone.utc).isoformat(timespec="seconds"), int(not err), err,
+                                round(time.time() - t0, 1), code])
+            except OSError as e:
+                logger.error(f"udmpay_watch: не записать {log}: {e}")
+            misses, oks = (misses + 1, 0) if err else (0, oks + 1)
+            state = payment_outage.load()
+            if misses >= 2 and state["down_since"] is None:
+                state["down_since"] = time.time() - settings.UDMPAY_WATCH_INTERVAL_SEC
+                state["since"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                payment_outage.save(state)
+                send_email(subject="Horizance VPN: UDM Pay недоступен",
+                           body=(f"UDM Pay не принимает наш логин: магазин не найден (HTTP 404 Accounts\\Account) — "
+                                 f"нужно писать в поддержку UDM Pay." if err == "account_missing" else
+                                 f"{url} не отвечает ({err}).") + " Оплата по СБП на сайте и в боте не работает.",
+                           to=settings.NOTIFY_EMAIL)
+                logger.warning(f"udmpay_watch: UDM Pay недоступен ({err})")
+            elif oks >= 2 and state["down_since"] is None and state["users"]:
+                # сбоя нет, а попытки накопились — разовые таймауты; иначе следующая рассылка ушла бы и им
+                state["users"] = []
+                payment_outage.save(state)
+            elif oks >= 2 and state["down_since"] is not None:
+                mins = round((time.time() - state["down_since"]) / 60)
+                state["down_since"] = None
+                payment_outage.save(state)
+                sent = await self.notify_recovered()
+                send_email(subject="Horizance VPN: UDM Pay снова онлайн",
+                           body=f"UDM Pay отвечает. Был недоступен примерно {mins} мин. "
+                                f"Рассылка «оплата заработала» отправлена {len(sent)} пользователям: {sent}.",
+                           to=settings.NOTIFY_EMAIL)
+                logger.warning(f"udmpay_watch: UDM Pay снова онлайн, простой ~{mins} мин, рассылка: {sent}")
+            await asyncio.sleep(settings.UDMPAY_WATCH_INTERVAL_SEC)
 
     async def run(self) -> None:
         while True:
@@ -319,6 +465,7 @@ class NodeMonitor:
                 )
                 await self._watchdog([r for r in per_node if isinstance(r, dict)])
                 await self._router_quota()
+                await self._abandoned_orders()
                 if self._load:
                     # одна строка на цикл: история нагрузки нод
                     logger.info(

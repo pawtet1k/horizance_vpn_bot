@@ -61,3 +61,29 @@ def inline_css() -> Markup:
 
 
 templates.env.globals["inline_css"] = inline_css
+
+
+# --- Язык страницы (решение владельца 10.10.26: иностранцу — английский) ---
+# request.state.en ставит middleware site_language в app.py. Поисковым роботам всегда русский: сайт продвигается
+# в русском поиске, и английская версия для Googlebot (US-IP, Accept-Language: en) убила бы позиции.
+from jinja2 import pass_context  # noqa: E402
+
+
+@pass_context
+def t(ctx, ru: str, en: str) -> str:
+    request = ctx.get("request")
+    return en if request is not None and getattr(request.state, "en", False) else ru
+
+
+@pass_context
+def is_en(ctx) -> bool:
+    request = ctx.get("request")
+    return bool(request is not None and getattr(request.state, "en", False))
+
+
+templates.env.globals["t"] = t
+templates.env.globals["is_en"] = is_en
+
+
+import whop  # noqa: E402
+templates.env.globals["whop_enabled"] = whop.enabled

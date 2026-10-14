@@ -1,4 +1,5 @@
 import sqlite3
+import time
 from models import User, TrialUser, WebUser, trial_expired
 from datetime import datetime, timezone
 import credentials
@@ -55,7 +56,9 @@ class UserManager:
         traffic_out INTEGER,
         traffic_period_start INTEGER,
         traffic_period_date TEXT,
-        notifications TEXT
+        notifications TEXT,
+        extra_devices_until TEXT,
+        extra_devices INTEGER DEFAULT 0
     '''
 
     def create_table(self):
@@ -94,9 +97,15 @@ class UserManager:
                 self.execute_query(f"ALTER TABLE {table} ADD COLUMN traffic_period_date TEXT")
             except sqlite3.OperationalError:
                 pass
+            for column in ("extra_devices_until TEXT", "extra_devices INTEGER DEFAULT 0"):
+                try:
+                    self.execute_query(f"ALTER TABLE {table} ADD COLUMN {column}")
+                except sqlite3.OperationalError:
+                    pass
         self.create_trial_table()
         self.create_web_users_table()
         self.create_payment_orders_table()
+        self.create_web_logins_table()
         logger.debug('Таблица users загружена.')
         #self.execute_query(
           #  "ALTER TABLE users ADD COLUMN language INTEGER DEFAULT '0'"
@@ -155,22 +164,80 @@ class UserManager:
             self.execute_query("ALTER TABLE payment_orders ADD COLUMN payment_link TEXT")
         except sqlite3.OperationalError:
             pass  # столбец уже существует
+        try:
+            # что оплачивается: 'subscription' (подписка) или 'extra_devices' (докупка устройств, 13.10.26)
+            self.execute_query("ALTER TABLE payment_orders ADD COLUMN product TEXT DEFAULT 'subscription'")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            # цена тарифа без опций: price — сумма заказа (тариф + доп. устройства), а срок и paid_periods
+            # считаются по тарифу. NULL — заказ без опций (price и есть тариф).
+            self.execute_query("ALTER TABLE payment_orders ADD COLUMN base_price INTEGER")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            # отметка «владельцу уже написали о брошенной оплате» (node_monitor._abandoned_orders)
+            self.execute_query("ALTER TABLE payment_orders ADD COLUMN abandoned_alerted_at TEXT")
+        except sqlite3.OperationalError:
+            pass
 
-    def record_payment_order(self, order_id, user_id, provider, price, payment_link=None):
+    # Вход на сайт через бота (QR-код / кнопка «Войти через Telegram», 14.10.26): сайт заводит строку со
+    # случайным token, бот по /start login_<token> узнаёт user_id и спрашивает подтверждение, сайт ждёт
+    # status='approved' и заводит сессию. Сайт и бот — разные процессы, общая у них только эта база.
+    def create_web_logins_table(self):
+        self.execute_query("""CREATE TABLE IF NOT EXISTS web_logins (
+            token TEXT PRIMARY KEY,
+            created_at REAL,
+            ip TEXT,
+            device TEXT,
+            place TEXT,
+            status TEXT DEFAULT 'pending',
+            user_id INTEGER,
+            username TEXT,
+            first_name TEXT,
+            last_name TEXT
+        )""")
+
+    def add_web_login(self, token, ip, device, place):
+        self.execute_query(
+            "INSERT INTO web_logins (token, created_at, ip, device, place) VALUES (?, ?, ?, ?, ?)",
+            (token, time.time(), ip, device, place),
+        )
+        # старые строки не копим: после выдачи сессии они не нужны
+        self.execute_query("DELETE FROM web_logins WHERE created_at < ?", (time.time() - 86400,))
+
+    def get_web_login(self, token):
+        row = self.execute_query("SELECT * FROM web_logins WHERE token = ?", (token,), fetchone=True)
+        return dict(row) if row else None
+
+    def update_web_login(self, token, from_status, **fields) -> bool:
+        """Переход статуса только из from_status — повторное нажатие или старый токен ничего не меняют."""
+        cols = ", ".join(f"{k} = ?" for k in fields)
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.execute(
+                f"UPDATE web_logins SET {cols} WHERE token = ? AND status = ?",
+                (*fields.values(), token, from_status),
+            )
+            return cursor.rowcount == 1
+
+    def record_payment_order(self, order_id, user_id, provider, price, payment_link=None, product="subscription",
+                             base_price=None):
         if order_id:
             self.execute_query(
                 "INSERT OR IGNORE INTO payment_orders "
-                "(order_id, user_id, provider, price, payment_link) VALUES (?, ?, ?, ?, ?)",
-                (str(order_id), user_id, provider, price, payment_link),
+                "(order_id, user_id, provider, price, payment_link, product, base_price) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (str(order_id), user_id, provider, price, payment_link, product, base_price),
             )
 
-    def get_recent_unpaid_order(self, user_id, provider, price, minutes):
-        """Последний неоплаченный заказ с сохранённой ссылкой не старше minutes."""
+    def get_recent_unpaid_order(self, user_id, provider, price, minutes, product="subscription"):
+        """Последний неоплаченный заказ с сохранённой ссылкой не старше minutes. product — чтобы ссылку на
+        подписку за 99 ₽ не выдали вместо докупки устройств за те же 99 ₽ (и наоборот)."""
         row = self.execute_query(
             "SELECT * FROM payment_orders WHERE user_id = ? AND provider = ? AND price = ? "
+            "AND COALESCE(product, 'subscription') = ? "
             "AND paid_at IS NULL AND payment_link IS NOT NULL "
             "AND created_at >= datetime('now', ?) ORDER BY created_at DESC LIMIT 1",
-            (user_id, provider, price, f"-{int(minutes)} minutes"), fetchone=True,
+            (user_id, provider, price, product, f"-{int(minutes)} minutes"), fetchone=True,
         )
         return dict(row) if row else None
 

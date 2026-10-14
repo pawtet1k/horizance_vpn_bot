@@ -11,7 +11,7 @@
      help          → переход на /help             (публичный, доступен и из ЛК)
    ═══════════════════════════════════════════════════════════════ #}
 
-{% block title %}Личный кабинет — Horizance VPN{% endblock %}
+{% block title %}{{ t('Личный кабинет', 'Account') }} — Horizance VPN{% endblock %}
 {% block meta_description %}Управление подпиской Horizance VPN: оплата, настройка конфигурации, приглашение друзей.{% endblock %}
 {% block canonical %}https://horizancevpn.com/dashboard{% endblock %}
 {% block robots %}noindex, nofollow{% endblock %}
@@ -19,8 +19,8 @@
 {% block content %}
 <section class="max-w-3xl mx-auto px-6 py-12">
 
-  <h1 class="text-2xl font-bold tracking-tight mb-1">Личный кабинет</h1>
-  <p class="text-dim text-sm mb-8">{{ user_name | default('Подписчик Horizance') }}</p>
+  <h1 class="text-2xl font-bold tracking-tight mb-1">{{ t('Личный кабинет', 'Your account') }}</h1>
+  <p class="text-dim text-sm mb-8">{{ user_name | default(t('Подписчик Horizance', 'Horizance subscriber')) }}</p>
 
   <!-- ═══ Блок статуса подписки — наполняется AJAX-вызовом /api/subscription (бывшая команда "start") ═══ -->
   <div id="subscription-card"
@@ -28,11 +28,11 @@
        aria-live="polite">
     <div id="subscription-loading" class="flex items-center gap-3 text-dim text-sm">
       <span class="w-4 h-4 border-2 border-mute border-t-transparent rounded-full animate-spin" aria-hidden="true"></span>
-      Загружаем статус подписки…
+      {{ t('Загружаем статус подписки…', 'Loading subscription status…') }}
     </div>
     <div id="subscription-content" class="hidden"></div>
     <div id="subscription-error" class="hidden text-sm text-rose-400">
-      Не удалось загрузить статус подписки. Попробуйте обновить страницу.
+      {{ t('Не удалось загрузить статус подписки. Попробуйте обновить страницу.', 'Could not load subscription status. Please refresh the page.') }}
     </div>
   </div>
 
@@ -43,8 +43,8 @@
        class="bg-surface2 border border-line2 hover:border-faint rounded-2xl p-5 flex items-center gap-4 transition-colors">
       <i class="fa-solid fa-credit-card text-primary text-xl" aria-hidden="true"></i>
       <div>
-        <div class="font-semibold text-ink2 text-sm">Подключить оплату</div>
-        <div class="text-xs text-faint">Оплатить или продлить подписку</div>
+        <div class="font-semibold text-ink2 text-sm">{{ t('Подключить оплату', 'Subscribe') }}</div>
+        <div class="text-xs text-faint">{{ t('Оплатить или продлить подписку', 'Pay for or renew your subscription') }}</div>
       </div>
     </a>
 
@@ -52,8 +52,8 @@
        class="bg-surface2 border border-line2 hover:border-faint rounded-2xl p-5 flex items-center gap-4 transition-colors">
       <i class="fa-solid fa-sliders text-primary text-xl" aria-hidden="true"></i>
       <div>
-        <div class="font-semibold text-ink2 text-sm">Настроить VPN</div>
-        <div class="text-xs text-faint">Ссылка для подключения устройства</div>
+        <div class="font-semibold text-ink2 text-sm">{{ t('Настроить VPN', 'Set up VPN') }}</div>
+        <div class="text-xs text-faint">{{ t('Ссылка для подключения устройства', 'Link to connect your device') }}</div>
       </div>
     </a>
 
@@ -61,21 +61,30 @@
        class="bg-surface2 border border-line2 hover:border-faint rounded-2xl p-5 flex items-center gap-4 transition-colors">
       <i class="fa-solid fa-user-plus text-primary text-xl" aria-hidden="true"></i>
       <div>
-        <div class="font-semibold text-ink2 text-sm">Пригласить друга</div>
-        <div class="text-xs text-faint">Реферальная ссылка и бонусы</div>
+        <div class="font-semibold text-ink2 text-sm">{{ t('Пригласить друга', 'Invite a friend') }}</div>
+        <div class="text-xs text-faint">{{ t('Реферальная ссылка и бонусы', 'Referral link and bonuses') }}</div>
       </div>
     </a>
   </div>
 
-  <!-- ═══ Кнопки, доступные и публично, и из ЛК: qr_code, help ═══ -->
-  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+  <!-- ═══ Кнопки, доступные и публично, и из ЛК: qr_code, help; devices — только из ЛК ═══ -->
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+
+    <a href="/devices"
+       class="bg-surface2 border border-line2 hover:border-faint rounded-2xl p-5 flex items-center gap-4 transition-colors">
+      <i class="fa-solid fa-mobile-screen text-primary text-xl" aria-hidden="true"></i>
+      <div>
+        <div class="font-semibold text-ink2 text-sm">{{ t('Мои устройства', 'My devices') }}</div>
+        <div class="text-xs text-faint">{{ t('Убрать лишнее или докупить ещё', 'Remove one or add more') }}</div>
+      </div>
+    </a>
 
     <a href="/qr_code"
        class="bg-surface2 border border-line2 hover:border-faint rounded-2xl p-5 flex items-center gap-4 transition-colors">
       <i class="fa-solid fa-qrcode text-primary text-xl" aria-hidden="true"></i>
       <div>
-        <div class="font-semibold text-ink2 text-sm">QR-код на бота</div>
-        <div class="text-xs text-faint">Быстрый доступ с другого устройства</div>
+        <div class="font-semibold text-ink2 text-sm">{{ t('QR-код на бота', 'Bot QR code') }}</div>
+        <div class="text-xs text-faint">{{ t('Быстрый доступ с другого устройства', 'Quick access from another device') }}</div>
       </div>
     </a>
 
@@ -83,8 +92,8 @@
        class="bg-surface2 border border-line2 hover:border-faint rounded-2xl p-5 flex items-center gap-4 transition-colors">
       <i class="fa-solid fa-headset text-primary text-xl" aria-hidden="true"></i>
       <div>
-        <div class="font-semibold text-ink2 text-sm">Написать в поддержку</div>
-        <div class="text-xs text-faint">Ответим в Telegram</div>
+        <div class="font-semibold text-ink2 text-sm">{{ t('Написать в поддержку', 'Contact support') }}</div>
+        <div class="text-xs text-faint">{{ t('Ответим в Telegram', 'We reply in Telegram') }}</div>
       </div>
     </a>
   </div>
@@ -123,7 +132,7 @@ async function fetchSubscriptionStatus() {
  */
 function formatExpiryDate(isoDate) {
   const date = new Date(isoDate);
-  return date.toLocaleDateString("ru-RU", {
+  return date.toLocaleDateString({{ t("ru-RU", "en-US") | tojson }}, {
     day: "numeric",
     month: "long",
     year: "numeric"
@@ -140,16 +149,16 @@ function formatExpiryDate(isoDate) {
 function renderSubscriptionCard(data) {
   const statusColor = data.is_active ? "text-emerald-400" : "text-rose-400";
   const expiryText = data.expires_at
-    ? `до ${formatExpiryDate(data.expires_at)}`
-    : "без активной подписки";
+    ? {{ t('до ', 'until ') | tojson }} + formatExpiryDate(data.expires_at)
+    : {{ t('без активной подписки', 'no active subscription') | tojson }};
   const autoRenewColor = data.auto_renew ? "text-emerald-400" : "text-rose-400";
-  const autoRenewText = data.auto_renew ? "настроено" : "не настроено";
+  const autoRenewText = data.auto_renew ? {{ t('настроено', 'on') | tojson }} : {{ t('не настроено', 'off') | tojson }};
 
   const card = document.createElement("div");
 
   const statusCaption = document.createElement("div");
   statusCaption.className = "text-xs text-dim mb-1";
-  statusCaption.textContent = "Статус подписки";
+  statusCaption.textContent = {{ t('Статус подписки', 'Subscription status') | tojson }};
   card.appendChild(statusCaption);
 
   const statusValue = document.createElement("div");
@@ -164,7 +173,7 @@ function renderSubscriptionCard(data) {
 
   const renewRow = document.createElement("div");
   renewRow.className = "text-xs text-faint mt-2";
-  renewRow.append("Продление подписки: ");
+  renewRow.append({{ t('Продление подписки: ', 'Auto-renewal: ') | tojson }});
   const renewValue = document.createElement("span");
   renewValue.className = `font-semibold ${autoRenewColor}`;
   renewValue.textContent = autoRenewText;

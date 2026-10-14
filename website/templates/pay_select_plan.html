@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
-{% block title %}Оплата подписки — Horizance VPN{% endblock %}
-{% block meta_description %}Выберите тариф подписки Horizance VPN.{% endblock %}
+{% block title %}{{ t("Оплата подписки", "Subscription payment") }} — Horizance VPN{% endblock %}
+{% block meta_description %}{{ t("Выберите тариф подписки Horizance VPN.", "Choose a Horizance VPN plan.") }}{% endblock %}
 {% block canonical %}https://horizancevpn.com/pay{% endblock %}
 {% block robots %}noindex, nofollow{% endblock %}
 
@@ -9,24 +9,42 @@
 <section class="max-w-2xl mx-auto px-6 py-12">
 
   <a href="/dashboard" class="text-dim text-sm hover:text-ink transition-colors mb-6 inline-flex items-center gap-2">
-    <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> В личный кабинет
+    <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> {{ t("В личный кабинет", "Back to account") }}
   </a>
 
-  <h1 class="text-2xl font-bold tracking-tight mb-2">Оплата подписки</h1>
-  <p class="text-dim text-sm mb-8">Выберите тариф:</p>
+  <h1 class="text-2xl font-bold tracking-tight mb-2">{{ t("Оплата подписки", "Subscription payment") }}</h1>
+  <p class="text-dim text-sm mb-8">{{ t("Выберите тариф и способ оплаты:", "Choose a plan and a payment method:") }}</p>
 
+  {# 11.10.26: на сайте появилась криптовалюта (раньше — только СБП, а она работает лишь с российскими банками).
+     Иностранцу криптовалюта первой. #}
+  {% set methods = ([("card", "💳 Card / Apple Pay", "pay_card")] if whop_enabled() else [])
+       + [("crypto", "🪙 Cryptocurrency (USDT)", "pay_crypto"), ("sbp", "🏦 SBP — Russian bank cards only", "pay_sbp")]
+       if is_en() else
+       [("sbp", "💳 СБП", "pay_sbp"), ("crypto", "🪙 Криптовалюта", "pay_crypto")] %}
   <div class="grid sm:grid-cols-2 gap-4">
     {% for plan, price in plans.items() %}
-    <a href="/pay/{{ plan }}" data-busy="payment" data-t="pay_{{ plan }}"
-       class="bg-surface border border-line2 rounded-2xl p-6
-              flex flex-col items-start gap-1
-              transition-all duration-150 hover:border-faint hover:bg-surface2">
-      <span class="text-sm font-semibold text-dim">{{ {'month': 'Месяц', 'year': 'Год'}[plan] }}</span>
-      <span class="text-2xl font-extrabold text-ink">{{ price }}&nbsp;₽</span>
-      {% if plan == 'year' %}
-      <span class="text-sm font-semibold text-accent">−{{ settings.yearly_discount_percent }}%: выгода {{ settings.yearly_saving_rub }}&nbsp;₽ против помесячной оплаты</span>
+    <div class="bg-surface border border-line2 rounded-2xl p-6 flex flex-col items-start gap-1">
+      <span class="text-sm font-semibold text-dim">{{ t({'month': 'Месяц', 'year': 'Год'}[plan], {'month': 'Month', 'year': 'Year'}[plan]) }}</span>
+      {% set total = price + (settings.get_extra_devices_price(price) if extra else 0) %}
+      <span class="text-2xl font-extrabold text-ink">{{ total }}&nbsp;₽{% if is_en() and settings.CRYPTO_PRICE_USD.get(price) %} <span class="text-base font-semibold text-dim">≈ ${{ (settings.CRYPTO_PRICE_USD[price] * total / price) | round(2) }}</span>{% endif %}</span>
+      {% if extra %}
+      <span class="text-sm text-dim">{{ t("подписка", "subscription") }} {{ price }}&nbsp;₽ + {{ settings.EXTRA_DEVICES_COUNT }} {{ t("доп. устройства", "extra devices") }} {{ settings.get_extra_devices_price(price) }}&nbsp;₽ · <a href="/devices" class="underline">{{ t("изменить", "change") }}</a></span>
       {% endif %}
-    </a>
+      {% if plan == 'year' %}
+      <span class="text-sm font-semibold text-accent">−{{ settings.yearly_discount_percent }}%: {{ t("выгода", "you save") }} {{ settings.yearly_saving_rub }}&nbsp;₽ {{ t("против помесячной оплаты", "compared to monthly") }}</span>
+      {% endif %}
+      <div class="w-full flex flex-col gap-2 mt-4">
+        {% for method, label, goal in methods %}
+        {% if method != "crypto" or settings.NOWPAYMENTS_ENABLED %}
+        <a href="/pay/{{ plan }}{{ '' if method == 'sbp' else '?method=' ~ method }}" data-busy="payment" data-t="{{ goal }}_{{ plan }}"
+           class="w-full text-center text-sm font-semibold rounded-xl py-3 transition-colors
+                  {{ 'bg-white text-black hover:opacity-90' if loop.first else 'border border-line2 text-ink2 hover:border-faint hover:bg-surface2' }}">
+          {{ label }}
+        </a>
+        {% endif %}
+        {% endfor %}
+      </div>
+    </div>
     {% endfor %}
   </div>
 
