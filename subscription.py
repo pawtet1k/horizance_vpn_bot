@@ -120,6 +120,25 @@ class SubscriptionManager:
                   + ("You can pay by cryptocurrency now — «Cryptocurrency» in /pay. " if crypto else "")
                   + "We will message you in our Telegram bot as soon as SBP is back.")
 
+    async def _outage_attempt(self, vpn_bot, user) -> None:
+        """СБП не создала заказ: записать попытку (рассылка «оплата заработала») и ответить человеку.
+        Во время объявленного сбоя отключённого (inactive) возвращаем бесплатно на OUTAGE_FREE_DAYS — решение
+        владельца 15.10.26 (раньше Марию и Дмитрия возвращали руками). Статус — по правилу 12.10: active только тем,
+        кто хоть раз платил, остальным trial."""
+        payment_outage.note_attempt(user.user_id)
+        text = self._udmpay_unreachable_text(user)
+        if payment_outage.is_down() and user.status == UserStatus.INACTIVE:
+            until = datetime.now() + timedelta(days=settings.OUTAGE_FREE_DAYS)
+            status = UserStatus.ACTIVE if user.paid_periods else UserStatus.TRIAL
+            client_uuid = await self.vpn_manager.setup_xray(user)
+            self.user_manager.update_user(user.user_id, status=status, client_uuid=client_uuid,
+                                          next_payment_date=until.strftime("%d.%m.%y"))
+            logger.warning(f"{user.user_id}: сбой оплаты — возвращён бесплатно ({status.value}) до "
+                           f"{until:%d.%m.%y}")
+            text += tr(user, f"\n\nПока оплата не работает, мы бесплатно включили вам VPN до {until:%d.%m}.",
+                       f"\n\nWhile payments are down, we have turned your VPN back on for free until {until:%d.%m}.")
+        await vpn_bot.send_message(user.user_id, text)
+
     async def _create_udmpay_payment(self, vpn_bot, user):
         """Первый платёж через UDM Pay: заказ + привязка подписки СБП одним
         запросом. Оплата асинхронная (СБП QR через банк) — активация
@@ -150,8 +169,7 @@ class SubscriptionManager:
             logger.error(f"{user.user_id}: ошибка создания заказа UDM Pay: {e}")
             if udmpay.is_account_missing(e) or payment_outage.is_down():
                 # 14.10.26: UDM Pay ожил без нашего магазина — это сбой, а не «попробуйте ещё раз»
-                payment_outage.note_attempt(user.user_id)
-                await vpn_bot.send_message(user.user_id, self._udmpay_unreachable_text(user))
+                await self._outage_attempt(vpn_bot, user)
                 return None
             if (e.status_code or 0) >= 500:
                 # сбой на стороне UDM Pay: 05.10.26 он длился ~10 минут, и
@@ -170,8 +188,7 @@ class SubscriptionManager:
             # дважды упала страница /pay/month). Ссылку человек не получил,
             # значит и платить ему было нечем.
             logger.warning(f"{user.user_id}: UDM Pay не ответил при создании заказа: {e!r}")
-            payment_outage.note_attempt(user.user_id)
-            await vpn_bot.send_message(user.user_id, self._udmpay_unreachable_text(user))
+            await self._outage_attempt(vpn_bot, user)
             return None
 
         order_uid = result.get("orderUid")
@@ -366,15 +383,13 @@ class SubscriptionManager:
                 except udmpay.UdmPayError as e:
                     logger.error(f"{user.user_id}: UDM Pay, доп. устройства: {e}")
                     if udmpay.is_account_missing(e) or payment_outage.is_down():
-                        payment_outage.note_attempt(user.user_id)
-                        await vpn_bot.send_message(user.user_id, self._udmpay_unreachable_text(user))
+                        await self._outage_attempt(vpn_bot, user)
                     else:
                         await vpn_bot.send_message(user.user_id, error_text)
                     return None
                 except httpx.TransportError as e:
                     logger.warning(f"{user.user_id}: UDM Pay не ответил при создании заказа: {e!r}")
-                    payment_outage.note_attempt(user.user_id)
-                    await vpn_bot.send_message(user.user_id, self._udmpay_unreachable_text(user))
+                    await self._outage_attempt(vpn_bot, user)
                     return None
                 order_id, url = result.get("orderUid"), result.get("paymentLink")
         elif method == "crypto":

@@ -269,5 +269,12 @@ existing tone/emoji conventions) unless told otherwise.
 - `payment_outage.json` → `queued`: тексты, одобренные «отправить, когда заработает оплата» (доп. устройства donrava/Goystar/namakx);
   уходят из `notify_recovered` после рассылки. Файл в .gitignore.
 - Даты публикации на страницах статей убраны (владелец); в JSON-LD остались, `dateModified` = `modified_iso` статьи, если есть.
-- Бэкап: `backup_db.py`, crontab каждые 6 ч → `~/backups/horizance_vpn_bot/` (28 копий). Копии вне сервера нет.
+- Бэкап: `backup_db.py`, crontab каждые 6 ч → `~/backups/horizance_vpn_bot/` (28 копий) + та же папка на MX по SFTP (решение владельца).
 - 14.10 диск NL был заполнен на 100% (174 МБ); почищены кэши apt/snap и журнал, journald ограничен 100 МБ — свободно ~1,4 ГБ.
+
+### 15.10.2026: автовозврат при попытке оплаты во время сбоя
+- `SubscriptionManager._outage_attempt` (все места, где СБП не создала заказ): записывает попытку в `payment_outage.json` и, если сбой
+  объявлен и человек `inactive`, сам возвращает его на `settings.OUTAGE_FREE_DAYS` (7) — `active`, если платил, иначе `trial` (правило 12.10),
+  `setup_xray`, и дописывает к тексту сбоя «Пока оплата не работает, мы бесплатно включили вам VPN до DD.MM.». Тест `test_outage_attempt_restores_inactive_for_free`.
+- Рассылку «оплата заработала» НЕ слать тем, кто не пытался платить (владелец 15.10: они не знали о сбое).
+- `stats_growth.py`: подписка считается закончившейся в сам день «оплачено до» (`until <= today`) — бот отключает в этот день.

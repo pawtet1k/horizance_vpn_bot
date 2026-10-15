@@ -771,10 +771,10 @@ class TestUdmPayPaymentFlow(BotIntegrationTestCase):
 
     async def test_router_choice_replaces_regular_link(self):
         # ссылка одна: обычная или роутерная; смена режима — новый uuid (старый setup_xray снимает с нод)
-        self.create_user(777023, status=UserStatus.ACTIVE, device_os='iOS', client_uuid='old-uuid',
+        self.create_user(877023, status=UserStatus.ACTIVE, device_os='iOS', client_uuid='old-uuid',
                          traffic_in=100, traffic_out=200)
-        await main.cb_device_selected(callback_event(777023, settings.ROUTER_DEVICE))
-        user = self.get_user(777023)
+        await main.cb_device_selected(callback_event(877023, settings.ROUTER_DEVICE))
+        user = self.get_user(877023)
         self.assertEqual(user.device_os, settings.ROUTER_DEVICE)
         self.assertNotEqual(user.client_uuid, 'old-uuid')
         self.assertEqual(user.traffic_period_start, 300)
@@ -783,23 +783,23 @@ class TestUdmPayPaymentFlow(BotIntegrationTestCase):
         self.assertIn('больше не работает', text)
 
         # тот же режим ещё раз — uuid прежний, окно лимита не сбрасывается
-        main.user_manager.update_user(777023, traffic_out=900)
-        await main.cb_device_selected(callback_event(777023, settings.ROUTER_DEVICE))
-        again = self.get_user(777023)
+        main.user_manager.update_user(877023, traffic_out=900)
+        await main.cb_device_selected(callback_event(877023, settings.ROUTER_DEVICE))
+        again = self.get_user(877023)
         self.assertEqual(again.client_uuid, user.client_uuid)
         self.assertEqual(again.traffic_period_start, 300)
 
-        await main.cb_device_selected(callback_event(777023, 'Android'))
-        self.assertNotEqual(self.get_user(777023).client_uuid, user.client_uuid)
+        await main.cb_device_selected(callback_event(877023, 'Android'))
+        self.assertNotEqual(self.get_user(877023).client_uuid, user.client_uuid)
 
     async def test_router_quota_disconnects_then_restores_in_new_window(self):
         from node_monitor import NodeMonitor
         limit_mb = settings.ROUTER_TRAFFIC_LIMIT_GB * 1024
         today = datetime.now().date()
-        self.create_user(777021, status=UserStatus.ACTIVE, device_os=settings.ROUTER_DEVICE,
+        self.create_user(877021, status=UserStatus.ACTIVE, device_os=settings.ROUTER_DEVICE,
                          traffic_in=0, traffic_out=limit_mb - 10, traffic_period_start=0,
                          traffic_period_date=today.isoformat())
-        self.create_user(777022, status=UserStatus.ACTIVE, device_os=settings.ROUTER_DEVICE,
+        self.create_user(877022, status=UserStatus.ACTIVE, device_os=settings.ROUTER_DEVICE,
                          traffic_in=0, traffic_out=100, traffic_period_start=0,
                          traffic_period_date=today.isoformat())
         self.create_user(777024, status=UserStatus.ACTIVE, device_os='Android',
@@ -807,19 +807,19 @@ class TestUdmPayPaymentFlow(BotIntegrationTestCase):
         main.vpn_manager.get_user_traffic = AsyncMock(return_value={"uplink": 0, "downlink": 50 * 1000000})
         monitor = NodeMonitor(main.vpn_manager, main.user_manager, main.vpn_bot)
         await monitor._router_quota()
-        main.vpn_manager.remove_client_from_xray.assert_awaited_once_with(777021)  # 10 МБ запаса − 50 МБ
-        self.assertEqual(self.get_user(777021).status, UserStatus.ACTIVE)  # оплачено — закрыт только роутер
-        self.assertTrue(self.get_user(777021).router_quota_exhausted())
+        main.vpn_manager.remove_client_from_xray.assert_awaited_once_with(877021)  # 10 МБ запаса − 50 МБ
+        self.assertEqual(self.get_user(877021).status, UserStatus.ACTIVE)  # оплачено — закрыт только роутер
+        self.assertTrue(self.get_user(877021).router_quota_exhausted())
 
         await monitor._router_quota()  # повторный цикл не шлёт сообщение снова
         main.vpn_manager.remove_client_from_xray.assert_awaited_once()
 
         old = (today - timedelta(days=settings.ROUTER_PERIOD_DAYS)).isoformat()
-        main.user_manager.update_user(777021, traffic_period_date=old)
+        main.user_manager.update_user(877021, traffic_period_date=old)
         main.vpn_manager.setup_xray.reset_mock()
         await monitor._router_quota()
         main.vpn_manager.setup_xray.assert_awaited_once()
-        user = self.get_user(777021)
+        user = self.get_user(877021)
         self.assertEqual(user.traffic_period_date, today.isoformat())
         self.assertFalse(user.router_quota_exhausted())
 
@@ -852,6 +852,31 @@ class TestUdmPayPaymentFlow(BotIntegrationTestCase):
         ):
             await main.subscription_manager.add_subscription(main.vpn_bot, self.get_user(777011))
         self.assertIn('временно не работает', main.vpn_bot.send_message.call_args.args[1])
+
+    async def test_outage_attempt_restores_inactive_for_free(self):
+        """15.10.26: отключённый пытается оплатить во время сбоя — возвращаем бесплатно на OUTAGE_FREE_DAYS;
+        active — только тем, кто платил, остальным trial. Тем, кто не отключён, статус не трогаем."""
+        import payment_outage
+        missing = udmpay.UdmPayError("No query results for model [App\\Models\\Accounts\\Account].", 404, {})
+        self.create_user(877021, price=99, status=UserStatus.INACTIVE, paid_periods=1, next_payment_date='01.10.26')
+        self.create_user(877022, price=99, status=UserStatus.INACTIVE, paid_periods=0, next_payment_date='01.10.26')
+        self.create_user(877023, price=99, status=UserStatus.TRIAL, next_payment_date='30.10.26')
+        until = (datetime.now() + timedelta(days=settings.OUTAGE_FREE_DAYS)).strftime("%d.%m.%y")
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(settings, 'PAYMENT_OUTAGE_PATH', os.path.join(tmp, 'outage.json')), \
+                patch.object(udmpay, 'create_subscription_with_payment', AsyncMock(side_effect=missing)), \
+                patch.object(main.vpn_manager, 'setup_xray', AsyncMock(return_value='uuid-x')) as setup:
+            payment_outage.save({"users": [], "since": None, "down_since": 1.0})
+            for uid in (877021, 877022, 877023):
+                await main.subscription_manager.add_subscription(main.vpn_bot, self.get_user(uid))
+            self.assertEqual(sorted(payment_outage.load()['users']), [877021, 877022, 877023])
+        self.assertEqual(setup.await_count, 2)
+        for uid, status in ((877021, UserStatus.ACTIVE), (877022, UserStatus.TRIAL)):
+            user = self.get_user(uid)
+            self.assertEqual((user.status, user.next_payment_date), (status, until))
+        self.assertEqual(self.get_user(877023).next_payment_date, '30.10.26')
+        self.assertIn('бесплатно включили', main.vpn_bot.send_message.call_args_list[0].args[1])
+        self.assertNotIn('бесплатно', main.vpn_bot.send_message.call_args_list[-1].args[1])
 
     async def test_udmpay_timeout_tells_user_to_retry(self):
         # 04.10.26 UDM Pay не ответил за 20 с, и /pay/month падал с 500

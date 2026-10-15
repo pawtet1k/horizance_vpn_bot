@@ -40,8 +40,15 @@
 
     <h1 class="text-2xl font-semibold tracking-tight mb-2">{{ t('Вход в личный кабинет', 'Sign in to your account') }}</h1>
     <p class="text-dim text-sm mb-8 leading-relaxed">
-      {{ t('Отдельная регистрация не нужна — аккаунт создаётся автоматически при первом входе.', 'No separate sign-up needed — your account is created automatically on first sign-in.') }}
+      {{ t('Вход — через ваш аккаунт Telegram, двумя способами на выбор. Регистрация не нужна: аккаунт создаётся при первом входе.', 'Sign in with your Telegram account — two ways to choose from. No sign-up needed: your account is created on first sign-in.') }}
     </p>
+
+    <!-- 14.10.26 (владелец): оба способа — Telegram, и это должно быть видно; номер телефона — равноправный
+         способ, не «запасной» мелким шрифтом. Подписи h2 над каждым способом. -->
+    <h2 class="text-sm font-semibold text-ink2 mb-3 flex items-center justify-center gap-2">
+      <i class="fa-brands fa-telegram text-[#229ED9]" aria-hidden="true"></i>
+      {{ t('Через бота Horizance в Telegram', 'Via the Horizance bot in Telegram') }}
+    </h2>
 
     <!-- ═══ Вход через бота (14.10.26): QR на компьютере, кнопка на телефоне ═══
          Страница берёт одноразовый токен (POST /api/auth/bot/new, routers/auth.py), показывает QR со ссылкой
@@ -144,7 +151,17 @@
       })();
     </script>
 
-    <!-- ═══ Запасной вариант: виджет Telegram (вход по номеру телефона) ═══
+    <div class="flex items-center gap-3 my-6">
+      <div class="flex-1 h-px bg-line"></div>
+      <span class="text-xs text-faint">{{ t('или', 'or') }}</span>
+      <div class="flex-1 h-px bg-line"></div>
+    </div>
+
+    <h2 class="text-sm font-semibold text-ink2 mb-3 flex items-center justify-center gap-2">
+      <i class="fa-brands fa-telegram text-[#229ED9]" aria-hidden="true"></i>
+      {{ t('По номеру телефона Telegram', 'With your Telegram phone number') }}
+    </h2>
+    <!-- ═══ Виджет Telegram (вход по номеру телефона) ═══
          Кастомная кнопка вместо авто-рендерящегося iframe-виджета.
          Telegram.Login.auth(bot_id, request_access) открывает поповер
          Telegram и отдаёт подписанные данные пользователя в callback;
@@ -153,10 +170,13 @@
          @BotFather → /setdomain, иначе Telegram откажет с "Bot domain invalid". -->
     <script src="https://telegram.org/js/telegram-widget.js?22"></script>
     <button type="button" id="tg-login"
-            class="flex items-center justify-center gap-2.5 w-full h-11 text-sm bg-surface2 border border-line2 text-ink2 font-medium rounded-lg transition-colors hover:border-faint">
-      <i class="fa-brands fa-telegram text-base text-[#229ED9]" aria-hidden="true"></i>
+            class="flex items-center justify-center gap-3 w-full h-14 text-base bg-surface2 border-2 border-[#229ED9]/60 text-ink font-semibold rounded-xl transition-colors hover:border-[#229ED9]">
+      <i class="fa-solid fa-mobile-screen text-lg text-[#229ED9]" aria-hidden="true"></i>
       {{ t('Войти по номеру телефона', 'Sign in by phone number') }}
     </button>
+    <p class="text-xs text-faint mt-3 leading-relaxed">
+      {{ t('Откроется окно Telegram: введите номер, к которому привязан Telegram, и подтвердите вход в приложении.', 'A Telegram window opens: enter the number linked to your Telegram and confirm the sign-in in the app.') }}
+    </p>
 
     <!-- ═══ Ссылка "нет приложения" ═══
          Виджет входа работает через попап/окно Telegram, а не прямым
@@ -168,7 +188,7 @@
          поставить приложение - только ссылка в стор, установка - руками
          пользователя. -->
     <p id="tg-install-hint" class="text-xs text-faint mt-3">
-      {{ t('Нет Telegram на этом устройстве?', 'No Telegram on this device?') }}
+      {{ t('Ещё нет Telegram?', 'No Telegram yet?') }}
       <a id="tg-install-link" href="{{ settings.TELEGRAM_APP_URLS['Windows'] }}" target="_blank" rel="noopener"
          class="underline hover:text-dim">{{ t('Установить', 'Install') }}</a>
     </p>

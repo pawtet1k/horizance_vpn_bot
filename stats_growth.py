@@ -142,7 +142,7 @@ def main():
     tried = [u for u, (until, ds) in newcomers.items()
              if u not in renewed and any(d > ds[0] + timedelta(days=7) and d >= until - timedelta(days=10)
                                          for d in attempts.get(u, []))]
-    gave_up = [u for u, (until, _) in newcomers.items() if u not in renewed and u not in tried and until < today]
+    gave_up = [u for u, (until, _) in newcomers.items() if u not in renewed and u not in tried and until <= today]  # бот отключает в сам день «оплачено до»
     ended = len(renewed) + len(tried) + len(gave_up)
     if ended:
         print(f"Продление (на {today:%d.%m}): платная подписка закончилась у {ended} — продлили {len(renewed)}, "

@@ -2,9 +2,10 @@
 
 sqlite3 .backup — согласованная копия на ходу, даже если бот и сайт в этот момент пишут (простой cp может
 скопировать базу посреди записи). Копия проверяется (integrity_check), сжимается и кладётся в BACKUP_DIR вне
-папки проекта — агент, чистящий проект, её не заденет. Храним 28 последних (неделя). Копии вне сервера — нет:
-от поломки сервера это не защищает, см. ответ владельцу 14.10.26.
+папки проекта — агент, чистящий проект, её не заденет. Храним 28 последних (неделя). Каждая копия ещё и
+уходит на MX (решение владельца 14.10.26) в ту же папку ~/backups/horizance_vpn_bot — на случай потери NL.
 """
+import asyncio
 import gzip
 import shutil
 import sqlite3
@@ -34,15 +35,39 @@ def backup(db: Path) -> Path:
     return out
 
 
+async def upload(files: list[Path]) -> None:
+    """Копирует files на MX по SFTP и оставляет там те же KEEP последних копий каждой базы."""
+    import asyncssh
+    import credentials
+    mx = next(s for s in credentials.SERVERS if s["name"] == "MX")
+    remote = "backups/horizance_vpn_bot"
+    async with asyncssh.connect(mx["host"], port=mx["port"], username=mx["username"], password=mx["password"],
+                                known_hosts=None) as conn:
+        await conn.run(f"mkdir -p -m 700 {remote}", check=True)
+        async with conn.start_sftp_client() as sftp:
+            await sftp.put([str(f) for f in files], remote)
+        for db in DATABASES:
+            await conn.run(f"ls -1 {remote}/{db.stem}_*.db.gz | head -n -{KEEP} | xargs -r rm --", check=True)
+
+
 if __name__ == "__main__":
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     failed = False
+    made = []
     for db in DATABASES:
         try:
-            print(datetime.now().isoformat(timespec="seconds"), backup(db))
+            made.append(backup(db))
+            print(datetime.now().isoformat(timespec="seconds"), made[-1])
         except Exception as e:
             failed = True
             print(datetime.now().isoformat(timespec="seconds"), db, "ОШИБКА:", e)
+    if made:
+        try:
+            asyncio.run(upload(made))
+            print(datetime.now().isoformat(timespec="seconds"), "на MX:", ", ".join(f.name for f in made))
+        except Exception as e:
+            failed = True
+            print(datetime.now().isoformat(timespec="seconds"), "MX ОШИБКА:", repr(e))
     if failed:
         from utils import send_email
         import settings
