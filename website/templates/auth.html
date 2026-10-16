@@ -223,6 +223,7 @@
               credentials: 'same-origin',
               body: JSON.stringify(data),
             }).then((resp) => resp.json().then((json) => {
+              if (resp.status === 403 && json.message) { alert(json.message); return; }  // блок-лист владельца
               if (resp.ok) {
                 var event = json.is_new ? 'signup' : 'login';
                 if (window.ym) ym({{ settings.YANDEX_METRIKA_COUNTER_ID }}, 'reachGoal', event);

@@ -13,11 +13,10 @@ import settings
 import credentials
 import udmpay
 import nowpayments
-import payment_outage
 import whop
 from models import UserStatus
 from my_logger import logger
-from utils import broadcast_message, days_since, send_email
+from utils import broadcast_message, days_since, notify_owner, send_email
 from i18n import is_english, tr
 
 
@@ -102,42 +101,26 @@ class SubscriptionManager:
         addon = settings.get_extra_devices_price(user.price)
         return user.price + addon, round(usd * (user.price + addon) / user.price, 2), user.price
 
-    @staticmethod
-    def _udmpay_unreachable_text(user) -> str:
-        """UDM Pay не ответил. Во время объявленного сбоя (node_monitor.run_udmpay_watch) — причина и обещание
-        написать, когда заработает (рассылка notify_recovered); иначе это разовый таймаут — «через минуту»."""
-        if not payment_outage.is_down():
-            return tr(user, "⏳ Платёжная система сейчас не отвечает. Деньги не списаны — "
-                            "попробуйте ещё раз через минуту.",
-                      "⏳ The payment system is not responding. You were not charged — "
-                      "please try again in a minute.")
-        ru, en = settings.PAYMENT_OUTAGE_REASON
-        crypto = settings.NOWPAYMENTS_ENABLED
-        return tr(user, "⏳ Оплата по СБП временно недоступна" + (f": {ru}." if ru else ".") + " Деньги не списаны. "
-                        + ("Оплатить сейчас можно криптовалютой — кнопка «Криптовалюта» в /pay. " if crypto else "")
-                        + "Как только СБП заработает, мы сообщим вам в нашем Telegram-боте.",
-                  "⏳ SBP payments are temporarily unavailable" + (f": {en}." if en else ".") + " You were not charged. "
-                  + ("You can pay by cryptocurrency now — «Cryptocurrency» in /pay. " if crypto else "")
-                  + "We will message you in our Telegram bot as soon as SBP is back.")
-
-    async def _outage_attempt(self, vpn_bot, user) -> None:
-        """СБП не создала заказ: записать попытку (рассылка «оплата заработала») и ответить человеку.
-        Во время объявленного сбоя отключённого (inactive) возвращаем бесплатно на OUTAGE_FREE_DAYS — решение
-        владельца 15.10.26 (раньше Марию и Дмитрия возвращали руками). Статус — по правилу 12.10: active только тем,
-        кто хоть раз платил, остальным trial."""
-        payment_outage.note_attempt(user.user_id)
-        text = self._udmpay_unreachable_text(user)
-        if payment_outage.is_down() and user.status == UserStatus.INACTIVE:
-            until = datetime.now() + timedelta(days=settings.OUTAGE_FREE_DAYS)
-            status = UserStatus.ACTIVE if user.paid_periods else UserStatus.TRIAL
-            client_uuid = await self.vpn_manager.setup_xray(user)
-            self.user_manager.update_user(user.user_id, status=status, client_uuid=client_uuid,
-                                          next_payment_date=until.strftime("%d.%m.%y"))
-            logger.warning(f"{user.user_id}: сбой оплаты — возвращён бесплатно ({status.value}) до "
-                           f"{until:%d.%m.%y}")
-            text += tr(user, f"\n\nПока оплата не работает, мы бесплатно включили вам VPN до {until:%d.%m}.",
-                       f"\n\nWhile payments are down, we have turned your VPN back on for free until {until:%d.%m}.")
+    async def _payment_failed(self, vpn_bot, user, provider: str, error, unavailable: bool) -> None:
+        """Заказ не создан. Человеку — один короткий текст на любой сбой провайдера, без причин и обещаний
+        (16.10.26: текст про сбой UDM Pay с датой восстановления устаревал, обещанные рассылки путали людей).
+        Владельцу — сразу в Telegram и на почту: заказа нет, значит «брошенная оплата» (node_monitor) не сработает,
+        и о таких попытках он узнавал, только спросив сам (сбой UDM Pay 11–16.10.26)."""
+        crypto = settings.NOWPAYMENTS_ENABLED and provider == "UDM Pay"
+        if unavailable:
+            text = tr(user, "⏳ Оплата по СБП временно не работает, деньги не списаны. Попробуйте позже"
+                            + (" или оплатите криптовалютой — кнопка «Криптовалюта» в /pay." if crypto else "."),
+                      "⏳ SBP payments are temporarily unavailable; you were not charged. Please try again later"
+                      + (" or pay by cryptocurrency — «Cryptocurrency» in /pay." if crypto else "."))
+        else:
+            text = tr(user, "Во время оплаты произошла ошибка. Попробуйте еще разок.",
+                      "Something went wrong with the payment. Please try again.")
         await vpn_bot.send_message(user.user_id, text)
+        await notify_owner(
+            f"Horizance VPN: оплата не прошла {user.user_id}",
+            f"💳 Не удалось создать оплату ({provider}): {user.user_id} @{user.username or '—'} "
+            f"({user.first_name or ''}), статус {getattr(user.status, 'value', user.status)}, оплачено месяцев "
+            f"{user.paid_periods}, тариф {user.price} ₽, срок до {user.next_payment_date}. Ошибка: {error!r}")
 
     async def _create_udmpay_payment(self, vpn_bot, user):
         """Первый платёж через UDM Pay: заказ + привязка подписки СБП одним
@@ -167,28 +150,16 @@ class SubscriptionManager:
             )
         except udmpay.UdmPayError as e:
             logger.error(f"{user.user_id}: ошибка создания заказа UDM Pay: {e}")
-            if udmpay.is_account_missing(e) or payment_outage.is_down():
-                # 14.10.26: UDM Pay ожил без нашего магазина — это сбой, а не «попробуйте ещё раз»
-                await self._outage_attempt(vpn_bot, user)
-                return None
-            if (e.status_code or 0) >= 500:
-                # сбой на стороне UDM Pay: 05.10.26 он длился ~10 минут, и
-                # «попробуйте еще разок» человек нажимал 10 раз подряд
-                text = tr(user, "⏳ Платёжная система временно не работает. Деньги не списаны — "
-                                "попробуйте через 10–15 минут.",
-                          "⏳ The payment system is temporarily unavailable. You were not charged — "
-                          "please try again in 10–15 minutes.")
-            else:
-                text = tr(user, "Во время оплаты произошла ошибка. Попробуйте еще разок.",
-                          "Something went wrong with the payment. Please try again.")
-            await vpn_bot.send_message(user.user_id, text)
+            # 5xx — сбой на их стороне (05.10.26 ~10 минут); «магазин не найден» — 14–16.10.26 после атак на ЦОД
+            await self._payment_failed(vpn_bot, user, "UDM Pay", e,
+                                       udmpay.is_account_missing(e) or (e.status_code or 0) >= 500)
             return None
         except httpx.TransportError as e:
             # UDM Pay не ответил за 20 с или связь оборвалась (04.10.26 так
             # дважды упала страница /pay/month). Ссылку человек не получил,
             # значит и платить ему было нечем.
             logger.warning(f"{user.user_id}: UDM Pay не ответил при создании заказа: {e!r}")
-            await self._outage_attempt(vpn_bot, user)
+            await self._payment_failed(vpn_bot, user, "UDM Pay", e, True)
             return None
 
         order_uid = result.get("orderUid")
@@ -250,11 +221,7 @@ class SubscriptionManager:
             )
         except nowpayments.NowPaymentsError as e:
             logger.error(f"{user.user_id}: ошибка создания счёта NOWPayments: {e}")
-            await vpn_bot.send_message(
-                user.user_id,
-                tr(user, "Во время оплаты произошла ошибка. Попробуйте еще разок.",
-                   "Something went wrong with the payment. Please try again.")
-            )
+            await self._payment_failed(vpn_bot, user, "NOWPayments", e, False)
             return None
 
         invoice_id = str(result.get("id"))
@@ -382,14 +349,12 @@ class SubscriptionManager:
                     )
                 except udmpay.UdmPayError as e:
                     logger.error(f"{user.user_id}: UDM Pay, доп. устройства: {e}")
-                    if udmpay.is_account_missing(e) or payment_outage.is_down():
-                        await self._outage_attempt(vpn_bot, user)
-                    else:
-                        await vpn_bot.send_message(user.user_id, error_text)
+                    await self._payment_failed(vpn_bot, user, "UDM Pay", e,
+                                               udmpay.is_account_missing(e) or (e.status_code or 0) >= 500)
                     return None
                 except httpx.TransportError as e:
                     logger.warning(f"{user.user_id}: UDM Pay не ответил при создании заказа: {e!r}")
-                    await self._outage_attempt(vpn_bot, user)
+                    await self._payment_failed(vpn_bot, user, "UDM Pay", e, True)
                     return None
                 order_id, url = result.get("orderUid"), result.get("paymentLink")
         elif method == "crypto":
@@ -403,7 +368,7 @@ class SubscriptionManager:
                 )
             except nowpayments.NowPaymentsError as e:
                 logger.error(f"{user.user_id}: NOWPayments, доп. устройства: {e}")
-                await vpn_bot.send_message(user.user_id, error_text)
+                await self._payment_failed(vpn_bot, user, "NOWPayments", e, False)
                 return None
             order_id, url = str(result.get("id")), result.get("invoice_url")
         elif method == "card" and whop.enabled():

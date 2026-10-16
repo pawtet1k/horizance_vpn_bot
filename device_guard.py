@@ -47,7 +47,7 @@ def init_tables() -> None:
         except sqlite3.OperationalError:
             pass  # столбец уже есть
         conn.execute('''CREATE TABLE IF NOT EXISTS banned (
-            kind TEXT NOT NULL,          -- 'ip' | 'hwid'
+            kind TEXT NOT NULL,          -- 'ip' | 'hwid' | 'user' (ключ, сторож) | 'blocked' (человек, все сервисы)
             value TEXT NOT NULL,
             reason TEXT,
             created_at TEXT NOT NULL,
@@ -81,7 +81,7 @@ def is_banned(ip: str | None = None, hwid: str | None = None,
     with _connect() as conn:
         row = conn.execute(
             "SELECT 1 FROM banned WHERE (kind='ip' AND value=?) "
-            "OR (kind='hwid' AND value=?) OR (kind='user' AND value=?)",
+            "OR (kind='hwid' AND value=?) OR (kind IN ('user', 'blocked') AND value=?)",
             (ip, hwid, None if user_id is None else str(user_id))
         ).fetchone()
     return row is not None
@@ -89,7 +89,15 @@ def is_banned(ip: str | None = None, hwid: str | None = None,
 
 def banned_users() -> set[str]:
     with _connect() as conn:
-        return {r["value"] for r in conn.execute("SELECT value FROM banned WHERE kind='user'")}
+        return {r["value"] for r in conn.execute("SELECT value FROM banned WHERE kind IN ('user', 'blocked')")}
+
+
+def is_blocked(user_id) -> bool:
+    """Человек в блок-листе владельца (kind='blocked'): бот молчит, на сайт не пускает, ключ не работает.
+    kind='user' (сторож раздачи) отключает только ключ — ботом и сайтом такой человек пользуется."""
+    with _connect() as conn:
+        return conn.execute("SELECT 1 FROM banned WHERE kind='blocked' AND value=?",
+                            (str(user_id),)).fetchone() is not None
 
 
 def is_node_ip(ip: str) -> bool:

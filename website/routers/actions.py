@@ -40,6 +40,9 @@ def _current_user(request: Request):
     user_id = request.session.get("user_id")
     if not user_id:
         return None, None
+    if device_guard.is_blocked(user_id):
+        request.session.pop("user_id", None)
+        return None, None
     user = _db.get_user(user_id)
     if user is not None and not user.language and getattr(request.state, "en", False):
         # вход виджетом языка не даёт; сайт определил английский — запоминаем, чтобы и бот, и инструкции

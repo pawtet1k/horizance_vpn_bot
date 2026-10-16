@@ -5,6 +5,7 @@ from telethon.tl.types import KeyboardButton, MessageMediaWebPage, ReplyKeyboard
 import pymorphy3
 
 import bot
+import device_guard
 from i18n import tr
 import credentials
 from my_logger import logger
@@ -43,6 +44,13 @@ def logging_command(user_id):
 
 def safe_handler(func):
     async def wrapper(event):
+        if device_guard.is_blocked(event.sender_id):
+            logger.info(f"{event.sender_id}: в блок-листе, {func.__name__} не обрабатываем.")
+            try:
+                await event.answer(tr(event.sender_id, *settings.BLOCKED_TEXT))
+            except Exception:
+                pass
+            return
         try:
             await func(event)
         except Exception as e:
@@ -321,6 +329,7 @@ async def main():
         asyncio.create_task(utils.ping(vpn_bot))
         _nm = NodeMonitor(vpn_manager, user_manager, vpn_bot)
         asyncio.create_task(_nm.run())
+        asyncio.create_task(_nm.run_uptime_probe())
         if settings.UDMPAY_ENABLED:
             asyncio.create_task(_nm.run_udmpay_watch())
         logger.info('--------------------------------------------------------')

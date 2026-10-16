@@ -185,24 +185,17 @@ WATCHDOG_CUT_IPS = 20         # больше — ключ отключается
 NODE_ALERT_COOLDOWN_SEC = 3600
 # Пинг UDM Pay (node_monitor.run_udmpay_watch)
 UDMPAY_WATCH_INTERVAL_SEC = 60
+# Замер доступности нод для клиентов (node_monitor.run_uptime_probe → my_logger/stats/node_uptime.csv, отчёт analytics/uptime.py)
+NODE_UPTIME_INTERVAL_SEC = 60
+NODE_UPTIME_PORT = 443
+NODE_UPTIME_TIMEOUT_SEC = 5
 # INCY (iPhone) понимает тот же профиль маршрутизации, что Happ (поля DirectSites/ProxySites…), только со схемой
 # incy://routing/onadd/ (документация INCY-DEV/incy-docs, ru/dev-docs/routing.md). 13.10.26 на устройстве не проверено —
 # пока выключено для всех; проверка: /sub/<uuid>?incy_routing=1 из INCY. Заработает — поставить True.
 INCY_ROUTING_ENABLED = True  # включено 14.10.26: владелец проверил на iPhone — Яндекс видит реальный IP, Google — IP VPN
-# Кто пытался оплатить во время сбоя UDM Pay и состояние сбоя — см. payment_outage.py
-# Причина сбоя для клиентов (ru, en) — показывается, только пока сбой объявлен (payment_outage.is_down()).
-# 11.10.26: атаки дронов на ЦОД Яндекса, UDM Pay в Yandex Cloud (AS200350). После сбоя — очистить: ("", "").
-# 14.10.26: UDM Pay переехал из Яндекс Облака, но наш магазин после восстановления не находится (HTTP 404 Account).
-# 14.10.26 поддержка UDM Pay владельцу: всё восстановят 14–15 октября — дата в тексте; не заработает к 16.10 — поправить.
-# На сколько дней бесплатно возвращаем отключённого, если он пытался оплатить во время сбоя (subscription._outage_attempt)
-OUTAGE_FREE_DAYS = 7
-PAYMENT_OUTAGE_REASON = (
-    "после атак беспилотников на дата-центры Яндекса сервисы нашего платёжного партнёра пока работают нестабильно. "
-    "Партнёр обещает полностью восстановить работу 14–15 октября",
-    "after drone attacks on the Yandex data centers, our payment provider's services are still unstable. "
-    "The provider expects to fully restore them on October 14–15",
-)
-PAYMENT_OUTAGE_PATH = str(Path(__file__).resolve().parent / "payment_outage.json")
+# Что видит человек из блок-листа владельца (device_guard.is_blocked) в боте и на сайте
+BLOCKED_TEXT = ("Ваш аккаунт заблокирован: доступ к Horizance VPN для вас закрыт навсегда.",
+                "Your account is blocked: access to Horizance VPN is permanently closed for you.")
 
 WEBSITE_BASE_URL = "https://horizancevpn.com"
 

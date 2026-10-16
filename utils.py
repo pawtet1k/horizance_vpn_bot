@@ -209,6 +209,23 @@ def send_email(subject: str, body: str, to: str) -> bool:
         return False
 
 
+async def notify_owner(subject: str, text: str) -> None:
+    """Сразу сообщить владельцу: Telegram (Bot API — работает и из процесса сайта) + письмо на NOTIFY_EMAIL.
+    Не через send_telegram_api_message: это не переписка с клиентом, в журнал «Ответ техподдержки» не пишем.
+    16.10.26: о неудачных попытках оплаты владелец узнавал только на следующий день, когда спрашивал сам."""
+    import settings
+    logger.warning(f"Владельцу: {subject} | {text}")
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.post(f"https://api.telegram.org/bot{credentials.BOT_TOKEN}/sendMessage",
+                                         json={"chat_id": settings.OWNER_TELEGRAM_ID, "text": text})
+        if response.status_code != 200:
+            logger.error(f"Владельцу в Telegram не ушло: HTTP {response.status_code}: {response.text}")
+    except Exception as e:
+        logger.error(f"Владельцу в Telegram не ушло: {e}")
+    await asyncio.to_thread(send_email, subject, text, settings.NOTIFY_EMAIL)
+
+
 async def email_support(user, question: str, to: str | None = None):
     """to=None — исторический адрес из credentials.SMTP_TO (так шлёт бот).
     Форма на сайте передаёт settings.SUPPORT_EMAIL."""

@@ -13,6 +13,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 
 import credentials
+import device_guard
 import settings
 from db import UserManager
 from request_helpers import get_client_ip, is_rate_limited
@@ -78,6 +79,10 @@ async def telegram_auth_callback(request: Request):
         logger.warning(f"Telegram-логин: неверная подпись, data={data}")
         return JSONResponse({"ok": False}, status_code=401)
 
+    if device_guard.is_blocked(data["id"]):
+        logger.info(f"{data['id']}: в блок-листе, вход виджетом отклонён.")
+        return JSONResponse({"ok": False, "message": settings.BLOCKED_TEXT[1 if getattr(request.state, "en", False) else 0]},
+                            status_code=403)
     is_new = _sign_in(request, int(data["id"]), data.get("username"), data.get("first_name"),
                       data.get("last_name"), "Telegram Login Widget")
     return JSONResponse({"ok": True, "is_new": is_new})

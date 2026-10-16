@@ -31,13 +31,12 @@ import httpx
 
 import credentials
 import device_guard
-import payment_outage
 import settings
 from models import UserStatus, trial_expired
-from i18n import is_english, tr
+from i18n import is_english
 from my_logger import logger
 from restore_users import clients_to_restore
-from utils import send_email, send_telegram_api_message
+from utils import notify_owner, send_email
 from vpn import ssh_connect_kwargs
 
 # интерфейс по умолчанию, его счётчики принятых/отправленных байт (rx/tx — то
@@ -140,11 +139,6 @@ class NodeMonitor:
             text = (f"Брошенная оплата: {r['user_id']} {who}. Создал ссылку на оплату ({methods}) "
                     f"{r['first_at'][:16]} UTC и не оплатил за {settings.ABANDONED_ORDER_MINUTES} мин"
                     + (f", заказов: {r['n']}" if r['n'] > 1 else "") + ".")
-            # подсказка — только если она про этого человека (14.10.26 «иностранцу — крипту» приходило про
-            # русскую Марию, которая и так ушла в крипту, потому что СБП не работала)
-            first_ts = datetime.strptime(r["first_at"][:19], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc).timestamp()
-            if payment_outage.failed_between(r["user_id"], first_ts - 2 * 3600, time.time()):
-                text += " Перед этим СБП у него не сработала (сбой UDM Pay)."
             if user and is_english(user) and "NOWPayments" not in (r["providers"] or ""):
                 text += " Иностранец: СБП только для российских банков — предложить криптовалюту или карту."
             self._alert(key, f"Horizance VPN: брошенная оплата {r['user_id']}", text)
@@ -358,57 +352,20 @@ class NodeMonitor:
                 f"{how}\nОбычно у одного человека 1–5 IP.",
             )
 
-    async def notify_recovered(self) -> list[int]:
-        """Оплата заработала: пишем всем, кто пытался оплатить за время сбоя (СБП — payment_outage.users,
-        крипта и прочее — неоплаченные заказы в payment_orders с даты since), если они с тех пор не оплатили."""
-        from bot import plan_choice_buttons  # локально: bot тянет Telethon и много лишнего
-        data = payment_outage.load()
-        since = data["since"] or "2026-10-10"
-        rows = self.users.execute_query(
-            "SELECT DISTINCT user_id FROM payment_orders WHERE paid_at IS NULL AND created_at >= ?",
-            (since,), fetchall=True,
-        ) or []
-        ids = (set(data["users"]) | {r["user_id"] for r in rows}) - {settings.OWNER_TELEGRAM_ID}
-        sent = []
-        for uid in sorted(ids):
-            user = self.users.get_user(uid)
-            if user is None or self._paid_since(uid, since):
-                continue
-            en = is_english(user)
-            rows_btn = [[{"text": b.text, "callback_data": b.data.decode()}] for row in plan_choice_buttons(english=en, extra=bool(user.extra_devices))
-                        for b in row]
-            text = tr(user, "Оплата снова работает. Выберите тариф ниже — и вам придёт ссылка на оплату.",
-                      "Payments are working again. Choose a plan below and you will get a payment link.")
-            if await send_telegram_api_message(uid, text, buttons=rows_btn, parse_mode=None):
-                sent.append(uid)
-        for item in data["queued"]:
-            if await send_telegram_api_message(item["user_id"], item["text"], parse_mode=None):
-                sent.append(item["user_id"])
-        data["queued"] = []
-        data["users"] = []
-        data["since"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        payment_outage.save(data)
-        return sent
-
-    def _paid_since(self, user_id: int, since: str) -> bool:
-        return bool(self.users.execute_query(
-            "SELECT 1 FROM payment_orders WHERE user_id = ? AND paid_at IS NOT NULL AND paid_at >= ?",
-            (user_id, since), fetchone=True))
-
     async def run_udmpay_watch(self) -> None:
-        """Пинг UDM Pay раз в UDMPAY_WATCH_INTERVAL_SEC: письмо владельцу, когда лёг и когда поднялся, и рассылка
-        тем, кто пытался оплатить, когда он поднялся. Лежит = нет HTTP-ответа вообще (код ответа корня API
-        в рабочем режиме не проверен — на 5xx не опираемся, чтобы не объявить вечный сбой); два промаха подряд (и два
-        успеха подряд для «снова онлайн»), чтобы не реагировать на один сбой. Состояние хранится в payment_outage.json
-        (переживает рестарт бота). Каждая проверка пишется в my_logger/stats/udmpay_uptime.csv.
-        Проверка — запрос /order/status с нашим логином (udmpay.health_check), а не пинг хоста: 14.10.26 хост ожил,
-        а магазина в нём не было (404 Accounts\\Account), и пинг разослал «оплата снова работает» зря."""
+        """Доступность UDM Pay раз в UDMPAY_WATCH_INTERVAL_SEC: владельцу (notify_owner — Telegram и почта) — когда лёг
+        и когда поднялся; клиентам ничего (16.10.26: рассылки «оплата заработала» после сбоя 11–16.10 убраны по решению
+        владельца). Два промаха / два успеха подряд — чтобы не реагировать на одиночный сбой. Состояние в памяти: после
+        рестарта бота во время сбоя владелец получит «недоступен» ещё раз. Каждая проверка — в
+        my_logger/stats/udmpay_uptime.csv. Проверка — запрос /order/status с нашим логином (udmpay.health_check), а не
+        пинг хоста: 14.10.26 хост ожил, а магазина в нём не было (404 Accounts\\Account)."""
         import udmpay
         url = udmpay._base_url()
         log = Path(__file__).resolve().parent / "my_logger" / "stats" / "udmpay_uptime.csv"
         misses = oks = 0
+        down_since = None
         while True:
-            t0, code = time.time(), ""
+            t0 = time.time()
             last = self.users.execute_query(
                 "SELECT order_id FROM payment_orders WHERE provider = 'UDM Pay' AND paid_at IS NOT NULL "
                 "ORDER BY paid_at DESC LIMIT 1", fetchone=True)
@@ -423,36 +380,55 @@ class NodeMonitor:
                     if new:
                         w.writerow(["utc", "ok", "error", "sec", "http"])
                     w.writerow([datetime.now(timezone.utc).isoformat(timespec="seconds"), int(not err), err,
-                                round(time.time() - t0, 1), code])
+                                round(time.time() - t0, 1), ""])
             except OSError as e:
                 logger.error(f"udmpay_watch: не записать {log}: {e}")
             misses, oks = (misses + 1, 0) if err else (0, oks + 1)
-            state = payment_outage.load()
-            if misses >= 2 and state["down_since"] is None:
-                state["down_since"] = time.time() - settings.UDMPAY_WATCH_INTERVAL_SEC
-                state["since"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-                payment_outage.save(state)
-                send_email(subject="Horizance VPN: UDM Pay недоступен",
-                           body=(f"UDM Pay не принимает наш логин: магазин не найден (HTTP 404 Accounts\\Account) — "
-                                 f"нужно писать в поддержку UDM Pay." if err == "account_missing" else
-                                 f"{url} не отвечает ({err}).") + " Оплата по СБП на сайте и в боте не работает.",
-                           to=settings.NOTIFY_EMAIL)
-                logger.warning(f"udmpay_watch: UDM Pay недоступен ({err})")
-            elif oks >= 2 and state["down_since"] is None and state["users"]:
-                # сбоя нет, а попытки накопились — разовые таймауты; иначе следующая рассылка ушла бы и им
-                state["users"] = []
-                payment_outage.save(state)
-            elif oks >= 2 and state["down_since"] is not None:
-                mins = round((time.time() - state["down_since"]) / 60)
-                state["down_since"] = None
-                payment_outage.save(state)
-                sent = await self.notify_recovered()
-                send_email(subject="Horizance VPN: UDM Pay снова онлайн",
-                           body=f"UDM Pay отвечает. Был недоступен примерно {mins} мин. "
-                                f"Рассылка «оплата заработала» отправлена {len(sent)} пользователям: {sent}.",
-                           to=settings.NOTIFY_EMAIL)
-                logger.warning(f"udmpay_watch: UDM Pay снова онлайн, простой ~{mins} мин, рассылка: {sent}")
+            if misses >= 2 and down_since is None:
+                down_since = time.time() - settings.UDMPAY_WATCH_INTERVAL_SEC
+                await notify_owner(
+                    "Horizance VPN: UDM Pay недоступен",
+                    ("UDM Pay не принимает наш логин: магазин не найден (HTTP 404 Accounts\\Account) — "
+                     "нужно писать в поддержку UDM Pay." if err == "account_missing" else f"{url} не отвечает ({err}).")
+                    + " Оплата по СБП на сайте и в боте не работает, клиенты видят «временно не работает».")
+            elif oks >= 2 and down_since is not None:
+                mins = round((time.time() - down_since) / 60)
+                down_since = None
+                await notify_owner("Horizance VPN: UDM Pay снова онлайн",
+                                   f"UDM Pay отвечает. Был недоступен примерно {mins} мин. Клиентам ничего не отправлялось.")
             await asyncio.sleep(settings.UDMPAY_WATCH_INTERVAL_SEC)
+
+    async def run_uptime_probe(self) -> None:
+        """Доступность нод для клиентов (16.10.26): раз в NODE_UPTIME_INTERVAL_SEC TCP-подключение к порту VPN
+        (NODE_UPTIME_PORT) каждой ноды отсюда, с NL. Не ssh: ssh-таймауты бота 15.10 не значили, что VPN лежал
+        (DE и KZ в те минуты обслуживали клиентов как обычно). Пишет my_logger/stats/node_uptime.csv; отчёт —
+        analytics/uptime.py. Чего не видит: блокировки на пути из России к ноде (RU 15.10 14:50–15:01 UTC) —
+        с NL нода в такие минуты доступна."""
+        log = Path(__file__).resolve().parent / "my_logger" / "stats" / "node_uptime.csv"
+
+        async def probe(server: dict) -> list:
+            t0, err = time.time(), ""
+            try:
+                _, writer = await asyncio.wait_for(
+                    asyncio.open_connection(server["host"], settings.NODE_UPTIME_PORT), settings.NODE_UPTIME_TIMEOUT_SEC)
+                writer.close()
+            except Exception as e:
+                err = type(e).__name__
+            return [datetime.now(timezone.utc).isoformat(timespec="seconds"), server.get("name", server["host"]),
+                    int(not err), int((time.time() - t0) * 1000), err]
+
+        while True:
+            rows = await asyncio.gather(*(probe(s) for s in credentials.SERVERS))
+            try:
+                new = not log.exists()
+                with log.open("a", newline="") as f:
+                    w = csv.writer(f)
+                    if new:
+                        w.writerow(["utc", "node", "ok", "ms", "error"])
+                    w.writerows(rows)
+            except OSError as e:
+                logger.error(f"uptime_probe: не записать {log}: {e}")
+            await asyncio.sleep(settings.NODE_UPTIME_INTERVAL_SEC)
 
     async def run(self) -> None:
         while True:

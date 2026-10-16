@@ -32,6 +32,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import credentials
 import db
+import device_guard
 import main
 import nowpayments
 import settings
@@ -216,13 +217,6 @@ class BotIntegrationTestCase(unittest.IsolatedAsyncioTestCase):
         main.user_manager.execute_query('DELETE FROM trial_sessions')
         main.waiting_for_question.clear()
 
-        # состояние сбоя UDM Pay — не боевое payment_outage.json (14.10.26 тест упал, пока в проде шёл сбой)
-        outage_dir = tempfile.TemporaryDirectory()
-        self.addCleanup(outage_dir.cleanup)
-        outage_patcher = patch.object(settings, 'PAYMENT_OUTAGE_PATH', os.path.join(outage_dir.name, 'outage.json'))
-        outage_patcher.start()
-        self.addCleanup(outage_patcher.stop)
-
         # SSH/xray никогда не должны реально вызываться в тестах
         # мок повторяет поведение настоящего setup_xray: переиспользует уже
         # выданный uuid, а если его нет — генерирует новый
@@ -253,6 +247,9 @@ class BotIntegrationTestCase(unittest.IsolatedAsyncioTestCase):
         send_email_patcher = patch.object(subscription, 'send_email')
         self.mock_send_email = send_email_patcher.start()
         self.addCleanup(send_email_patcher.stop)
+        owner_patcher = patch.object(subscription, 'notify_owner', new=AsyncMock())
+        self.mock_notify_owner = owner_patcher.start()
+        self.addCleanup(owner_patcher.stop)
 
     def create_user(self, user_id, **overrides):
         defaults = dict(
@@ -281,6 +278,20 @@ class BotIntegrationTestCase(unittest.IsolatedAsyncioTestCase):
 # --------------------------------------------------------------------------
 
 class TestStartCommand(BotIntegrationTestCase):
+
+    async def test_blocked_person_is_ignored_everywhere(self):
+        """16.10.26: блок-лист владельца — бот не отвечает и не заводит аккаунт; сторожевой бан ключа бот не трогает."""
+        with tempfile.TemporaryDirectory() as tmp, patch.object(device_guard, 'DB_PATH', os.path.join(tmp, 'g.db')):
+            device_guard.init_tables()
+            device_guard.ban('blocked', '111222', 'тест')
+            device_guard.ban('user', '111223', 'тест сторожа')
+            event = message_event(111222, '/start')
+            await main.start(event)
+            self.assertIsNone(self.get_user(111222))
+            self.assertEqual(event.answer.await_args.args[0], settings.BLOCKED_TEXT[0]); event.reply.assert_not_called()
+            self.assertTrue(device_guard.is_banned(user_id=111222))  # и /sub ему не отдаётся
+            await main.start(message_event(111223, '/start'))
+            self.assertIsNotNone(self.get_user(111223))
 
     async def test_new_user_without_referral_is_created_as_trial(self):
         event = message_event(111111, '/start')
@@ -595,6 +606,20 @@ class TestSubscriptionFlow(BotIntegrationTestCase):
         self.assertEqual(user.status, UserStatus.TRIAL)
         self.assertIsNone(user.payment_token)
 
+    async def test_plan_choice_says_remaining_days_are_kept(self):
+        """15.10.26: на экране тарифов — что оставшиеся дни не сгорают (оплата продлевает от даты окончания)."""
+        until = (datetime.now() + timedelta(days=10)).strftime("%d.%m.%y")
+        self.create_user(111021, price=99, status=UserStatus.TRIAL, next_payment_date=until)
+        self.create_user(111022, price=99, status=UserStatus.ACTIVE, paid_periods=1, next_payment_date=until)
+        self.create_user(111023, price=99, status=UserStatus.INACTIVE, next_payment_date='01.10.26')
+        texts = []
+        for uid in (111021, 111022, 111023):
+            await main.add_subscription(callback_event(uid, 'add_subscription'))
+            texts.append(main.vpn_bot.send_message.call_args.args[1])
+        self.assertIn(f"Оставшиеся бесплатные дни сохранятся: оплаченный период начнётся после {until[:5]}.", texts[0])
+        self.assertIn("Оставшиеся дни подписки сохранятся", texts[1])
+        self.assertEqual(texts[2], "Выберите тариф подписки:")
+
     async def test_selecting_monthly_plan_sends_manual_bank_transfer(self):
         """Ручной перевод - fallback-путь на случай settings.UDMPAY_ENABLED=False
         (сейчас включено по умолчанию, поэтому патчим явно): после выбора
@@ -853,56 +878,32 @@ class TestUdmPayPaymentFlow(BotIntegrationTestCase):
             await main.subscription_manager.add_subscription(main.vpn_bot, self.get_user(777011))
         self.assertIn('временно не работает', main.vpn_bot.send_message.call_args.args[1])
 
-    async def test_outage_attempt_restores_inactive_for_free(self):
-        """15.10.26: отключённый пытается оплатить во время сбоя — возвращаем бесплатно на OUTAGE_FREE_DAYS;
-        active — только тем, кто платил, остальным trial. Тем, кто не отключён, статус не трогаем."""
-        import payment_outage
-        missing = udmpay.UdmPayError("No query results for model [App\\Models\\Accounts\\Account].", 404, {})
-        self.create_user(877021, price=99, status=UserStatus.INACTIVE, paid_periods=1, next_payment_date='01.10.26')
-        self.create_user(877022, price=99, status=UserStatus.INACTIVE, paid_periods=0, next_payment_date='01.10.26')
-        self.create_user(877023, price=99, status=UserStatus.TRIAL, next_payment_date='30.10.26')
-        until = (datetime.now() + timedelta(days=settings.OUTAGE_FREE_DAYS)).strftime("%d.%m.%y")
-        with tempfile.TemporaryDirectory() as tmp, \
-                patch.object(settings, 'PAYMENT_OUTAGE_PATH', os.path.join(tmp, 'outage.json')), \
-                patch.object(udmpay, 'create_subscription_with_payment', AsyncMock(side_effect=missing)), \
-                patch.object(main.vpn_manager, 'setup_xray', AsyncMock(return_value='uuid-x')) as setup:
-            payment_outage.save({"users": [], "since": None, "down_since": 1.0})
-            for uid in (877021, 877022, 877023):
-                await main.subscription_manager.add_subscription(main.vpn_bot, self.get_user(uid))
-            self.assertEqual(sorted(payment_outage.load()['users']), [877021, 877022, 877023])
-        self.assertEqual(setup.await_count, 2)
-        for uid, status in ((877021, UserStatus.ACTIVE), (877022, UserStatus.TRIAL)):
-            user = self.get_user(uid)
-            self.assertEqual((user.status, user.next_payment_date), (status, until))
-        self.assertEqual(self.get_user(877023).next_payment_date, '30.10.26')
-        self.assertIn('бесплатно включили', main.vpn_bot.send_message.call_args_list[0].args[1])
-        self.assertNotIn('бесплатно', main.vpn_bot.send_message.call_args_list[-1].args[1])
-
-    async def test_udmpay_timeout_tells_user_to_retry(self):
-        # 04.10.26 UDM Pay не ответил за 20 с, и /pay/month падал с 500
+    async def test_payment_failure_tells_user_briefly_and_notifies_owner(self):
+        """16.10.26: на любой сбой UDM Pay — один короткий текст без причин и обещаний; владельцу — сразу
+        (заказа нет, «брошенная оплата» не сработает). Статус человека не трогаем."""
         import httpx
-        self.create_user(777009, price=99, status=UserStatus.TRIAL)
-        import payment_outage
-        with tempfile.TemporaryDirectory() as tmp, \
-                patch.object(settings, 'PAYMENT_OUTAGE_PATH', os.path.join(tmp, 'outage.json')), patch.object(
-            udmpay, 'create_subscription_with_payment',
-            AsyncMock(side_effect=httpx.ReadTimeout('timeout'))
-        ):
-            result = await main.subscription_manager.add_subscription(
-                main.vpn_bot, self.get_user(777009)
-            )
-            self.assertEqual(payment_outage.load()['users'], [777009])  # запомнен для рассылки «оплата заработала»
-            # разовый таймаут, сбой не объявлен — «через минуту», без причины сбоя
-            self.assertIn('через минуту', main.vpn_bot.send_message.call_args.args[1])
+        missing = udmpay.UdmPayError("No query results for model [App\\Models\\Accounts\\Account].", 404, {})
+        self.create_user(777009, price=99, status=UserStatus.INACTIVE, next_payment_date='01.10.26')
+        for error in (httpx.ReadTimeout('timeout'), missing):
+            with patch.object(udmpay, 'create_subscription_with_payment', AsyncMock(side_effect=error)):
+                result = await main.subscription_manager.add_subscription(main.vpn_bot, self.get_user(777009))
+            self.assertIsNone(result)
+            text = main.vpn_bot.send_message.call_args.args[1]
+            self.assertIn('временно не работает', text)
+            self.assertIn('Криптовалюта', text)
+        self.assertEqual(self.mock_notify_owner.await_count, 2)
+        self.assertIn('777009', self.mock_notify_owner.await_args.args[1])
+        user = self.get_user(777009)
+        self.assertEqual((user.status, user.next_payment_date, user.pending_order_uid),
+                         (UserStatus.INACTIVE, '01.10.26', None))
 
-            payment_outage.save({**payment_outage.load(), "down_since": 1.0})  # node_monitor объявил сбой
-            await main.subscription_manager.add_subscription(main.vpn_bot, self.get_user(777009))
-            outage_text = main.vpn_bot.send_message.call_args.args[1]
-            self.assertIn(settings.PAYMENT_OUTAGE_REASON[0], outage_text)
-            self.assertIn('Telegram-боте', outage_text)
-
-        self.assertIsNone(result)
-        self.assertIsNone(self.get_user(777009).pending_order_uid)
+    async def test_other_udmpay_error_says_try_again_and_notifies_owner(self):
+        self.create_user(777010, price=99, status=UserStatus.TRIAL)
+        with patch.object(udmpay, 'create_subscription_with_payment',
+                          AsyncMock(side_effect=udmpay.UdmPayError('Bad request', 422))):
+            await main.subscription_manager.add_subscription(main.vpn_bot, self.get_user(777010))
+        self.assertIn('Попробуйте еще разок', main.vpn_bot.send_message.call_args.args[1])
+        self.mock_notify_owner.assert_awaited_once()
 
     async def test_activate_paid_subscription_extends_and_provisions(self):
         self.create_user(
@@ -1207,50 +1208,6 @@ class TestNowPaymentsFlow(BotIntegrationTestCase):
 # /invite_friend и /qr_code
 # --------------------------------------------------------------------------
 
-class TestPaymentOutageBroadcast(BotIntegrationTestCase):
-    """Рассылка «оплата заработала» тем, кто пытался оплатить во время сбоя UDM Pay (node_monitor.notify_recovered)."""
-
-    async def test_notify_recovered(self):
-        import payment_outage
-        from node_monitor import NodeMonitor
-        main.user_manager.execute_query('DELETE FROM payment_orders')
-        for uid in (880001, 880002, 880003, 880004, settings.OWNER_TELEGRAM_ID):
-            self.create_user(uid)
-        main.user_manager.record_payment_order("o-unpaid", 880002, "NOWPayments", 99)   # крипта, не оплачен
-        main.user_manager.record_payment_order("o-paid", 880003, "NOWPayments", 99)
-        main.user_manager.mark_payment_order_paid("o-paid")                              # уже оплатил
-        with tempfile.TemporaryDirectory() as tmp, \
-                patch.object(settings, 'PAYMENT_OUTAGE_PATH', os.path.join(tmp, 'outage.json')):
-            payment_outage.note_attempt(880001)       # СБП: UDM Pay не создал заказ
-            payment_outage.note_attempt(880003)       # тоже пытался СБП, но потом оплатил
-            payment_outage.note_attempt(settings.OWNER_TELEGRAM_ID)
-            data = payment_outage.load()
-            data['queued'] = [{'user_id': 880004, 'text': 'одобренный текст'}]   # очередь «когда заработает оплата»
-            payment_outage.save(data)
-            monitor = NodeMonitor(main.vpn_manager, main.user_manager, main.vpn_bot)
-            with patch('node_monitor.send_telegram_api_message', new=AsyncMock(return_value=True)) as send:
-                sent = await monitor.notify_recovered()
-            self.assertEqual(sent, [880001, 880002, 880004])
-            self.assertEqual([c.args[0] for c in send.await_args_list], [880001, 880002, 880004])
-            self.assertEqual(send.await_args_list[2].args[1], 'одобренный текст')
-            self.assertEqual(payment_outage.load()['queued'], [])
-            buttons = send.await_args_list[0].kwargs['buttons']
-            self.assertEqual([b[0]['callback_data'] for b in buttons], ['select_plan_month', 'select_plan_year'])
-            self.assertEqual(payment_outage.load()['users'], [])   # второй раз не пишем
-
-    def test_failed_between(self):
-        """«Перед этим СБП не сработала» в письме о брошенной оплате — только по реальной попытке этого человека."""
-        import payment_outage
-        with tempfile.TemporaryDirectory() as tmp, \
-                patch.object(settings, 'PAYMENT_OUTAGE_PATH', os.path.join(tmp, 'outage.json')):
-            payment_outage.save({"users": [880005], "since": None, "down_since": 1.0})  # в списке, но попытки не было
-            payment_outage.note_attempt(880001)
-            now = __import__("time").time()
-            self.assertTrue(payment_outage.failed_between(880001, now - 60, now + 1))
-            self.assertFalse(payment_outage.failed_between(880001, now + 10, now + 20))
-            self.assertFalse(payment_outage.failed_between(880005, 0, now + 1))
-
-
 class TestExtraDevicesPurchase(BotIntegrationTestCase):
     """Доп. устройства — опция подписки: доплата за остаток срока, дальше одно продление (settings.EXTRA_DEVICES_*)."""
 
@@ -1510,7 +1467,6 @@ class TestErrorResilience(BotIntegrationTestCase):
 # device_guard: лимиты на триал и устройства (после аварии 22.09.26)
 # --------------------------------------------------------------------------
 
-import device_guard
 
 GUARD_DB = 'test_guard.db'
 

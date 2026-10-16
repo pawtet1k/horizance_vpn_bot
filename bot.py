@@ -126,8 +126,22 @@ def plan_choice_buttons(exclude_price=None, english=False, extra=False):
 async def callback_choose_plan(vpn_bot, user_id):
     user = utils_user(user_id)
     english = is_english(user)
+    text = "Choose a plan:" if english else "Выберите тариф подписки:"
+    # 15.10.26: с 05.10 новые на триале смотрели тарифы и уходили — не знали, что бесплатные дни не сгорают:
+    # оплата продлевает от даты окончания (SubscriptionManager._extend_next_payment_date)
+    try:
+        until = datetime.strptime(user.next_payment_date, "%d.%m.%y").date()
+    except (AttributeError, TypeError, ValueError):
+        until = None
+    if until and until > datetime.now().date() and user.status in (UserStatus.TRIAL, UserStatus.ACTIVE):
+        if english:
+            kind = "free days" if user.status == UserStatus.TRIAL else "subscription days"
+            text += f"\n\nYour remaining {kind} are kept: the paid period starts after {until:%d.%m}."
+        else:
+            kind = "бесплатные дни" if user.status == UserStatus.TRIAL else "дни подписки"
+            text += f"\n\nОставшиеся {kind} сохранятся: оплаченный период начнётся после {until:%d.%m}."
     await vpn_bot.send_message(
-        user_id, "Choose a plan:" if english else "Выберите тариф подписки:",
+        user_id, text,
         buttons=plan_choice_buttons(english=english, extra=bool(user and user.extra_devices))
     )
 
