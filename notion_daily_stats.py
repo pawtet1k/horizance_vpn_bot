@@ -27,6 +27,9 @@ API = "https://api.notion.com/v1"
 HEADERS = {"Authorization": f"Bearer {credentials.NOTION_API_KEY}", "Notion-Version": "2022-06-28"}
 MARK = "🤖 Автообновление"
 MSK = timezone(timedelta(hours=3))
+# Оплата, отнесённая к дню первой попытки (решение владельца 16.10.26): у mairamay СБП не работала 13.10 (сбой UDM Pay),
+# оплатила она 16.10. В строке 13.10 руками стоит «1*», из дня оплаты вычитаем здесь, чтобы не посчитать дважды.
+MOVED_PAYMENTS = {"16.10": 1}
 ROOT = Path(__file__).resolve().parent
 
 
@@ -72,6 +75,9 @@ def main(dry=False):
                 break
             cursor = data["next_cursor"]
         new = [row for row in rows if row[0] not in existing]
+        for row in new:
+            if row[0] in MOVED_PAYMENTS:
+                row[-1] = f"{int(row[-1]) - MOVED_PAYMENTS[row[0]]}*"
         updated = f"Обновлено {datetime.now(MSK):%d.%m.%Y} (данные по {end:%d.%m}) — скрипт `stats_growth.py`"
         auto = f"{MARK} {datetime.now(MSK):%d.%m %H:%M}: " + " · ".join(summary)
         print(f"новых строк: {[r[0] for r in new]}\n{updated}\n{auto}")
