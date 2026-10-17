@@ -915,11 +915,11 @@ class SubscriptionManager:
             # платившему пробный доступ не предлагаем: он уже клиент, ему нужно продление
             failed_charge_msg = (
                 "Оплаченный вами период закончился, VPN отключён.\n\n"
-                "Чтобы подключиться снова, нажмите «Продлить подписку» — "
+                "Чтобы подключиться снова, продлите подписку кнопкой ниже — "
                 "займёт меньше минуты."
             )
             failed_charge_msg_en = ("Your paid period has ended and the VPN is off.\n\n"
-                                    "To reconnect, tap «Renew subscription» — it takes less than a minute.")
+                                    "To reconnect, renew with the button below — it takes less than a minute.")
         if not deactivate_on_failure:
             logger.warning(
                 f"{user.user_id}: ранняя попытка продления не удалась, "
@@ -927,12 +927,11 @@ class SubscriptionManager:
             )
             return False
 
-        keyboard = [
-            [Button.inline("Продлить подписку" if user.paid_periods else "Подключить оплату",
-                           data="add_subscription")]
-        ]
-        keyboard_en = [[Button.inline("Renew subscription" if user.paid_periods else "Subscribe",
-                                      data="add_subscription")]]
+        if user.paid_periods and user.price:
+            keyboard, keyboard_en = self._renewal_buttons(user)
+        else:
+            keyboard = [[Button.inline("Подключить оплату", data="add_subscription")]]
+            keyboard_en = [[Button.inline("Subscribe", data="add_subscription")]]
         await broadcast_message(
             vpn_bot, self.user_manager, [user.user_id], failed_charge_msg,
             "подписка закончилась", buttons=keyboard,
@@ -1018,19 +1017,36 @@ class SubscriptionManager:
             elif days_left == 0:
                 await self.charge_subscription(vpn_bot, user)
 
-        if remind_ids:
+        for user_id in remind_ids:
+            user = self.user_manager.get_user(user_id)
+            if user.price:
+                buttons, buttons_en = self._renewal_buttons(user)
+            else:
+                buttons = [[Button.inline("Продлить подписку", data="add_subscription")]]
+                buttons_en = [[Button.inline("Renew subscription", data="add_subscription")]]
             await broadcast_message(
-                vpn_bot, self.user_manager, remind_ids,
+                vpn_bot, self.user_manager, [user_id],
                 "⚠️ **Ваша подписка истекает завтра**\n\n"
-                "Чтобы не потерять доступ, нажмите «Продлить подписку» — "
+                "Чтобы не потерять доступ, продлите её кнопкой ниже — "
                 "займёт меньше минуты.",
                 "подписка истекает завтра",
-                buttons=[[Button.inline("Продлить подписку", data="add_subscription")]],
+                buttons=buttons,
                 message_en=("⚠️ **Your subscription expires tomorrow**\n\n"
-                            "To keep access, tap «Renew subscription» — it takes less than a minute."),
-                buttons_en=[[Button.inline("Renew subscription", data="add_subscription")]],
+                            "To keep access, renew it with the button below — it takes less than a minute."),
+                buttons_en=buttons_en,
             )
         logger.info('process_payments успешно завершена')
+
+    @staticmethod
+    def _renewal_buttons(user):
+        """Кнопки продления в напоминаниях (17.10.26, решение владельца): годовому — только «Год», годовых
+        удерживаем годовыми; помесячному — «Месяц» и «Год», чтобы видел скидку года. Перейти с года на месяц
+        можно через /pay. Тариф — user.price: activate_paid_subscription ставит его из оплаченного заказа."""
+        from bot import plan_choice_buttons  # локально: bot импортирует почти весь проект
+        exclude = settings.default_price if user.price == settings.yearly_price else None
+        extra = bool(user.extra_devices)
+        return (plan_choice_buttons(exclude, extra=extra),
+                plan_choice_buttons(exclude, english=True, extra=extra))
 
 
     async def get_expired_trial_clients(self) -> list[dict]:

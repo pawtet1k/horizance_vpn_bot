@@ -385,6 +385,17 @@ async def callback_pay_crypto(vpn_bot, user_id, user_manager, subscription_manag
     await subscription_manager.add_crypto_subscription(vpn_bot, user)
 
 
+async def callback_pay_direct(vpn_bot, user_id, method, plan, user_manager, subscription_manager):
+    """Кнопка «тариф + способ» одним нажатием (pay:<sbp|crypto|card>:<month|year>) — для ручных сообщений
+    поддержки, когда человеку сразу нужен конкретный способ (17.10.26: Лена с белорусской картой)."""
+    price = settings.yearly_price if plan == "year" else settings.default_price
+    user_manager.update_user(user_id, price=price)
+    user = user_manager.get_user(user_id)
+    pay = {"sbp": subscription_manager.add_subscription, "crypto": subscription_manager.add_crypto_subscription,
+           "card": subscription_manager.add_card_subscription}[method]
+    await pay(vpn_bot, user)
+
+
 # Обработчики событий и коллбэков
 async def handle_start(event, vpn_bot, user_id, user_manager, subscription_manager, morth):
     def decline_word(number, word, morth=morth):

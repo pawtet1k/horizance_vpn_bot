@@ -244,6 +244,13 @@ async def pay_method_crypto(event):
     logging_command(event.sender.id)
     await bot.callback_pay_crypto(vpn_bot, event.sender.id, user_manager, subscription_manager)
 
+@vpn_bot.on(events.CallbackQuery(pattern=rb"^pay:(sbp|crypto|card):(month|year)$"))
+@safe_handler
+async def pay_direct(event):
+    logging_command(event.sender.id)
+    _, method, plan = event.data.decode().split(":")
+    await bot.callback_pay_direct(vpn_bot, event.sender.id, method, plan, user_manager, subscription_manager)
+
 @vpn_bot.on(events.CallbackQuery(data="pay_method_card"))
 @safe_handler
 async def pay_method_card(event):

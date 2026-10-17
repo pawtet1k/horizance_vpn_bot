@@ -1853,6 +1853,21 @@ class TestLegacyHostDetection(unittest.TestCase):
         self.assertFalse(web_vpn._is_legacy_host(req("horizancevpn.com")))
 
 
+class TestRenewalButtons(unittest.TestCase):
+    """Напоминание о продлении: годовому — только «Год», помесячному — «Месяц» и «Год»."""
+
+    def data(self, price):
+        user = MagicMock(price=price, extra_devices=0)
+        ru, _ = subscription.SubscriptionManager._renewal_buttons(user)
+        return [b.data for row in ru for b in row]
+
+    def test_yearly_gets_only_year(self):
+        self.assertEqual(self.data(settings.yearly_price), [b"select_plan_year"])
+
+    def test_monthly_gets_both(self):
+        self.assertEqual(self.data(settings.default_price), [b"select_plan_month", b"select_plan_year"])
+
+
 if __name__ == '__main__':
     unittest.main()
 
