@@ -119,6 +119,9 @@ async def udmpay_subscription_webhook(request: Request):
         )
         return JSONResponse({"ok": False}, status_code=502)
 
+    # весь вебхук и статус — в лог: 17.10.26 поддержка UDM Pay отрицает проблемы с автоплатежами, а мы видели только
+    # слово «rejected». Владельцу ответ банка уходит в письме об оплате (_notify_admin_of_payment_with_autopay).
+    logger.info(f"udmpay subscription-webhook {user.user_id}: вебхук={payload} статус={sub_status}")
     if sub_status.get("status") == "active" and sub_status.get("isActive"):
         await _subscriptions.bind_subscription(user.user_id, subscription_uid, order_uid)
     elif sub_status.get("status") == "rejected":

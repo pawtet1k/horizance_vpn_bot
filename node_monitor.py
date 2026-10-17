@@ -116,7 +116,9 @@ class NodeMonitor:
         """Брошенная оплата — см. settings.ABANDONED_ORDER_MINUTES. Окно сутки: дольше смысла звать уже нет."""
         rows = self.users.execute_query(
             "SELECT o.user_id, COUNT(*) AS n, MAX(o.order_id) AS last_order, MIN(o.created_at) AS first_at, "
-            "MAX(o.created_at) AS last_at, GROUP_CONCAT(DISTINCT o.provider) AS providers "
+            "MAX(o.created_at) AS last_at, GROUP_CONCAT(DISTINCT o.provider) AS providers, "
+            "(SELECT MAX(p.paid_at) FROM payment_orders p WHERE p.user_id = o.user_id AND p.paid_at IS NOT NULL "
+            "AND p.created_at < o.created_at) AS paid_earlier_at "
             "FROM payment_orders o WHERE o.paid_at IS NULL AND o.abandoned_alerted_at IS NULL "
             "AND o.created_at >= datetime('now', '-1 day') AND o.created_at <= datetime('now', ?) "
             "AND NOT EXISTS (SELECT 1 FROM payment_orders p WHERE p.user_id = o.user_id "
@@ -139,14 +141,15 @@ class NodeMonitor:
             text = (f"Брошенная оплата: {r['user_id']} {who}. Создал ссылку на оплату ({methods}) "
                     f"{r['first_at'][:16]} UTC и не оплатил за {settings.ABANDONED_ORDER_MINUTES} мин"
                     + (f", заказов: {r['n']}" if r['n'] > 1 else "") + ".")
+            if r["paid_earlier_at"]:
+                # 16.10.26 Расул: оплатил первую из двух ссылок, второй заказ создался двойным нажатием. Не скрываем:
+                # лишний заказ — признак того, что защита от двойного заказа не сработала
+                text += (f" Но более ранний его заказ оплачен {r['paid_earlier_at'][:16]} UTC — этот заказ лишний, "
+                         "проверить, откуда он (двойное нажатие, сайт и бот одновременно).")
             if user and is_english(user) and "NOWPayments" not in (r["providers"] or ""):
                 text += " Иностранец: СБП только для российских банков — предложить криптовалюту или карту."
+            # только письмо: Telegram владельцу о брошенных оплатах убран 17.10.26 по его решению
             self._alert(key, f"Horizance VPN: брошенная оплата {r['user_id']}", text)
-            if self.bot:
-                try:
-                    await self.bot.send_message(settings.OWNER_TELEGRAM_ID, "💳 " + text)
-                except Exception as e:
-                    logger.error(f"node_monitor: не удалось сообщить владельцу о брошенной оплате: {e}")
 
     async def _tell(self, user_id, text: str) -> None:
         if not self.bot:

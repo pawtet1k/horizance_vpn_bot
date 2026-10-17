@@ -20,6 +20,10 @@ from utils import broadcast_message, days_since, notify_owner, send_email
 from i18n import is_english, tr
 
 
+_order_locks: dict[int, asyncio.Lock] = {}
+_background_tasks: set = set()  # письма, ждущие ответа банка: ссылка, чтобы задачу не собрал GC
+
+
 class SubscriptionManager:
     def __init__(self, user_manager, vpn_manager):
         self.user_manager = user_manager
@@ -123,6 +127,13 @@ class SubscriptionManager:
             f"{user.paid_periods}, тариф {user.price} ₽, срок до {user.next_payment_date}. Ошибка: {error!r}")
 
     async def _create_udmpay_payment(self, vpn_bot, user):
+        # Двойное нажатие «СБП»: оба обработчика проверяли «есть ли свежий заказ» раньше, чем первый его
+        # записал, и создавали два заказа (16.10.26 Расул, 2 с между нажатиями). Второй ждёт первого и
+        # получает ту же ссылку. Сайт — другой процесс, его эта блокировка не касается.
+        async with _order_locks.setdefault(user.user_id, asyncio.Lock()):
+            return await self._create_udmpay_payment_locked(vpn_bot, user)
+
+    async def _create_udmpay_payment_locked(self, vpn_bot, user):
         """Первый платёж через UDM Pay: заказ + привязка подписки СБП одним
         запросом. Оплата асинхронная (СБП QR через банк) — активация
         подписки происходит не здесь, а в activate_paid_subscription(),
@@ -453,7 +464,7 @@ class SubscriptionManager:
         )
         return True
 
-    def _notify_admin_of_payment(self, user, order_uid, provider):
+    def _notify_admin_of_payment(self, user, order_uid, provider, autopay=""):
         """Ни UDM Pay, ни NOWPayments не присылают уведомлений о получении
         денег продавцу напрямую (деньги оседают у них) - без этого письма
         о поступлении оплаты просто неоткуда узнать."""
@@ -477,13 +488,42 @@ class SubscriptionManager:
             f"Тариф: {plan_label} ({days} дней)\n"
             f"Провайдер: {provider}\n"
             f"orderId: {order_uid}\n"
-            f"\n{self._signup_to_payment_line(user)}\n"
+            + autopay
+            + f"\n{self._signup_to_payment_line(user)}\n"
             f"Всего активных подписок: {self.user_manager.count_active_users()}"
         )
         send_email(
             f"Оплата {provider}: {amount_label} от {user.user_id}",
             body, settings.NOTIFY_EMAIL
         )
+
+    async def _notify_admin_of_payment_with_autopay(self, user, order_uid):
+        """Письмо об оплате UDM Pay с ответом банка на привязку автоплатежа (17.10.26: поддержка UDM Pay отрицает
+        проблемы с автоплатежами — нужны их же данные). Ждём окончательный статус до AUTOPAY_WAIT_SEC."""
+        sub_uid = user.pending_subscription_uid
+        status, order, error = {}, {}, ""
+        for _ in range(settings.AUTOPAY_WAIT_SEC // 5):
+            await asyncio.sleep(5)
+            try:
+                status = await udmpay.get_subscription_status(sub_uid)
+            except Exception as e:
+                error = repr(e)
+                continue
+            if status.get("status") in ("active", "rejected"):
+                break
+        try:
+            order = await udmpay.get_order_status(order_uid)
+        except Exception as e:
+            error = error or repr(e)
+        result = {"active": "ПРИВЯЗАН", "rejected": "ОТКЛОНЁН"}.get(status.get("status"),
+                                                                      f"нет ответа за {settings.AUTOPAY_WAIT_SEC} с")
+        autopay = (f"\nАвтоплатёж СБП: {result}\n"
+                   f"Банк (memberId в СБП): {status.get('memberId') or 'не указан'}\n"
+                   f"subscriptionUid: {sub_uid}\n"
+                   f"Ответ UDM Pay /sbp-subscription/status: {status or '—'}\n"
+                   f"Ответ UDM Pay /order/status: {order or '—'}\n"
+                   + (f"Ошибка запроса: {error}\n" if error and not status else ""))
+        self._notify_admin_of_payment(user, order_uid, "UDM Pay", autopay)
 
     @staticmethod
     def _signup_to_payment_line(user) -> str:
@@ -570,7 +610,13 @@ class SubscriptionManager:
             # заблокировал бота: оплата уже зачтена, а письмо владельцу нужно
             # всё равно (30.09.26 без этого письмо о cheet_nickers не ушло)
             logger.error(f"{user_id}: не удалось сообщить об активации: {e}")
-        self._notify_admin_of_payment(user, order_uid, provider)
+        if provider == "UDM Pay" and user.pending_subscription_uid:
+            # одно письмо вместе с ответом банка на «разрешить автоплатёж»: он приходит через секунды после оплаты
+            task = asyncio.create_task(self._notify_admin_of_payment_with_autopay(user, order_uid))
+            _background_tasks.add(task)
+            task.add_done_callback(_background_tasks.discard)
+        else:
+            self._notify_admin_of_payment(user, order_uid, provider)
         logger.info(f"{user_id}: подписка активирована через {provider} (orderId={order_uid}).")
         if first_payment and user.referrer_id:
             await self.reward_referrer(vpn_bot, user)

@@ -36,6 +36,15 @@ LOST_PAYMENTS = [
     (80344908, date(2026, 9, 2), None),
     (6289915099, date(2026, 9, 9), date(2026, 10, 1)),
 ]
+# Оплаты во время сбоя UDM Pay 11–16.10.26 — на день ПЕРВОЙ неудачной попытки (решение владельца 16–17.10.26), чтобы
+# и сами столбцы, и скользящие средние показывали спрос, а не день, когда починили оплату. В Notion такие дни со «*».
+# (user_id, день реальной оплаты, день первой попытки, новый плательщик?)
+MOVED_TO_ATTEMPT = [
+    (632675764, date(2026, 10, 16), date(2026, 10, 11), False),
+    (140785730, date(2026, 10, 16), date(2026, 10, 13), False),
+    (5295076397, date(2026, 10, 16), date(2026, 10, 14), True),
+    (1682224052, date(2026, 10, 17), date(2026, 10, 15), False),
+]
 ACTIVATED = re.compile(r"^\S+ (\d\d-\w{3}-\d\d) INFO: (\d+): подписка активирована через (UDM Pay|NOWPayments|Whop)")
 # цена конкретной оплаты: activate_paid_subscription пишет её строкой «Данные» прямо перед «активирована» (с 30.09.26;
 # раньше цены в строке нет — тогда месячная: годовых оплат до 08.10 не было, видно по paid_periods)
@@ -83,6 +92,9 @@ def collect(db_path="users.db"):
                 if (uid, d) not in moved:
                     paid_days[uid].append(d)
                     paid_prices[uid].append(price)
+    for uid, real_day, attempt_day, _ in MOVED_TO_ATTEMPT:
+        if real_day in paid_days.get(uid, []):
+            paid_days[uid][paid_days[uid].index(real_day)] = attempt_day
     for uid, real_day, _ in LOST_PAYMENTS:
         paid_days[uid].append(real_day)
         paid_prices[uid].append(99)
@@ -110,6 +122,9 @@ def main():
                     default=datetime.now(MSK).date() - timedelta(days=1))
     a = ap.parse_args()
     bot, tri, pay, first, users, paid_days, newcomers, attempts = collect()
+    settings_yearly = 999
+    start_dates = {u: datetime.strptime(sd, "%d.%m.%y").date() for u, sd in
+                   sqlite3.connect("file:users.db?mode=ro", uri=True).execute("SELECT user_id, start_date FROM users")}
     # окно средних считаем от FIRST_DAY, чтобы --from не обнулял начало средних
     days = [FIRST_DAY + timedelta(i) for i in range((a.end - FIRST_DAY).days + 1)]
 
@@ -149,6 +164,34 @@ def main():
               f"пытались продлить {len(tried)}, не пытались {len(gave_up)} — удержание "
               f"{100 * (len(renewed) + len(tried)) / ended:.0f}% ((продлили + пытались) ÷ закончилась); "
               f"у {len(newcomers) - ended} срок ещё не подошёл")
+        # переход «1 оплата → 2 оплаты» (владелец 17.10.26): попытка без оплаты здесь не засчитывается
+        print(f"Продление до 2-й оплаты: заплатили второй раз {len(renewed)} из {ended} "
+              f"({100 * len(renewed) / ended:.0f}%), у кого кончился первый оплаченный месяц")
+    # Активные по тарифу и числу оплат (17.10.26: раньше годовые на карту и двойные оплаты считались неверно).
+    # Год — текущий тариф 999 или 12+ оплаченных месяцев без оплат в логах (Stas_BSA, ирина — год переводом до 13.08).
+    # Повтор в пределах недели — двойное нажатие, это одна оплата. Оплаты переводом на карту до 13.08 в логах не видны:
+    # их месяцы = paid_periods − месяцы по логам; кто платил и так, и через UDM Pay, — «2+».
+    def periods(ds):
+        out = []
+        for d in sorted(ds):
+            if not out or d > out[-1] + timedelta(days=7):
+                out.append(d)
+        return out
+    c = sqlite3.connect("file:users.db?mode=ro", uri=True)
+    groups = collections.Counter()
+    for u, price, pp in c.execute("SELECT user_id, price, paid_periods FROM users WHERE status = 'active'"):
+        logged = periods(paid_days.get(u, []))
+        pp = pp or 0
+        if price == settings_yearly or (pp >= 12 and not logged):
+            groups["год"] += 1
+        elif not logged:
+            groups["только переводом на карту" if pp else "без оплат"] += 1
+        elif len(logged) >= 2 or (u not in newcomers and pp > len(logged) and start_dates[u] < UDM_START):
+            groups["помесячно, 2 и более оплат"] += 1
+        else:
+            groups["помесячно, 1 оплата"] += 1
+    print(f"Активные (на {today:%d.%m}): {sum(groups.values())} — "
+          + ", ".join(f"{k} {v}" for k, v in sorted(groups.items(), key=lambda kv: -kv[1])))
     print(f"\nКонверсия: пришли в бот {FIRST_DAY:%d.%m}–{cutoff:%d.%m} (триал кончился) — "
           f"оплатили {paid} из {len(cohort)} ({100 * paid / len(cohort):.0f}%)")
 
