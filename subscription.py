@@ -515,8 +515,9 @@ class SubscriptionManager:
             order = await udmpay.get_order_status(order_uid)
         except Exception as e:
             error = error or repr(e)
-        result = {"active": "ПРИВЯЗАН", "rejected": "ОТКЛОНЁН"}.get(status.get("status"),
-                                                                      f"нет ответа за {settings.AUTOPAY_WAIT_SEC} с")
+        result = {"active": "ПРИВЯЗАН", "rejected": "ОТКЛОНЁН",
+                  "new": f"НЕ ПОДТВЕРЖДЁН (status=new через {settings.AUTOPAY_WAIT_SEC} с)"}.get(
+            status.get("status"), f"нет ответа за {settings.AUTOPAY_WAIT_SEC} с")
         autopay = (f"\nАвтоплатёж СБП: {result}\n"
                    f"Банк (memberId в СБП): {status.get('memberId') or 'не указан'}\n"
                    f"subscriptionUid: {sub_uid}\n"
