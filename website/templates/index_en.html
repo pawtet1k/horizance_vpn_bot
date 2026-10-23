@@ -6,7 +6,7 @@
 
 {% block title %}Horizance VPN — fast, stable VPN on VLESS Reality{% endblock %}
 {% block meta_description %}Horizance VPN — a personal VPN on VLESS Reality. Servers in 6 countries, up to 3 devices, from $1.8 per month by card or cryptocurrency. Free 24-hour trial, no sign-up.{% endblock %}
-{% block canonical %}https://horizancevpn.com/{% endblock %}
+{% block canonical %}https://horizancevpn.com/en/{% endblock %}
 
 {% block content %}
 <section class="relative overflow-hidden border-b border-line">
@@ -26,7 +26,7 @@
       Happ app on your phone, computer or TV. Setup takes about two minutes.
     </p>
     <div class="flex flex-col sm:flex-row items-center justify-center gap-3">
-      <a href="/trial" class="w-full sm:w-auto bg-white text-black font-semibold rounded-xl px-7 py-4 hover:opacity-90 transition-opacity">
+      <a href="/en/trial" class="w-full sm:w-auto bg-white text-black font-semibold rounded-xl px-7 py-4 hover:opacity-90 transition-opacity">
         Try free for 24 hours
       </a>
       <a href="/go/bot?src=home_en" class="w-full sm:w-auto flex items-center justify-center gap-2 border border-line2 text-ink2 font-semibold rounded-xl px-7 py-4 hover:border-faint hover:bg-surface2 transition-colors">
@@ -35,6 +35,7 @@
     </div>
     <p class="text-xs text-faint mt-4">No card and no sign-up for the 24-hour trial.</p>
   </div>
+  {% include "_hero_stream.html" %}
 </section>
 
 <section id="how" class="border-b border-line">
@@ -83,21 +84,21 @@
         <div class="text-sm font-semibold text-dim mb-1">Trial</div>
         <div class="text-3xl font-extrabold mb-4">$0<span class="text-sm text-faint font-normal"> / 24 hours</span></div>
         <ul class="text-sm text-dim space-y-2 mb-6"><li>No speed limits</li><li>No card needed</li><li>No sign-up</li></ul>
-        <a href="/trial" class="block text-center border border-line2 hover:border-faint hover:bg-surface2 text-ink2 font-semibold rounded-xl py-3 transition-colors">Try it</a>
+        <a href="/en/trial" class="block text-center border border-line2 hover:border-faint hover:bg-surface2 text-ink2 font-semibold rounded-xl py-3 transition-colors">Try it</a>
       </div>
       <div class="bg-surface border-2 border-primary rounded-2xl p-7 relative">
         <span class="absolute -top-3 left-7 bg-primary text-white text-xs font-semibold px-3 py-1 rounded-full">Popular</span>
         <div class="text-sm font-semibold text-dim mb-1">Month</div>
         <div class="text-3xl font-extrabold mb-1">${{ settings.CRYPTO_PRICE_USD[settings.default_price] }}<span class="text-sm text-faint font-normal"> / month</span></div>
-        <div class="text-xs text-faint mb-4">{{ settings.default_price }}&nbsp;RUB</div>
+        <div class="text-xs text-faint mb-4">&nbsp;</div>
         <ul class="text-sm text-dim space-y-2 mb-6"><li>Up to {{ settings.DEVICE_LIMIT }} devices</li><li>All servers</li><li>Support in Telegram</li></ul>
         <a href="/auth?next=/pay" class="block text-center bg-primary hover:bg-primary-light text-white font-semibold rounded-xl py-3 transition-colors">Subscribe</a>
       </div>
       <div class="bg-surface border border-line rounded-2xl p-7">
         <div class="text-sm font-semibold text-dim mb-1">Year</div>
         <div class="text-3xl font-extrabold mb-1">${{ settings.CRYPTO_PRICE_USD[settings.yearly_price] }}<span class="text-sm text-faint font-normal"> / year</span></div>
-        <div class="text-xs text-faint mb-4">{{ settings.yearly_price }}&nbsp;RUB · −{{ settings.yearly_discount_percent }}%</div>
-        <ul class="text-sm text-dim space-y-2 mb-6"><li>Up to {{ settings.DEVICE_LIMIT }} devices</li><li>All servers</li><li>Save {{ settings.yearly_discount_percent }}% vs monthly</li></ul>
+        <div class="text-xs text-faint mb-4">−{{ settings.yearly_discount_percent_usd }}% vs monthly</div>
+        <ul class="text-sm text-dim space-y-2 mb-6"><li>Up to {{ settings.DEVICE_LIMIT }} devices</li><li>All servers</li><li>Save ${{ settings.yearly_saving_usd }} a year</li></ul>
         <a href="/auth?next=/pay" class="block text-center border border-line2 hover:border-faint hover:bg-surface2 text-ink2 font-semibold rounded-xl py-3 transition-colors">Subscribe</a>
       </div>
     </div>

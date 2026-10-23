@@ -5,6 +5,7 @@ import base64
 from datetime import datetime
 import httpx
 import json
+import re
 from pathlib import Path
 import subprocess
 import sqlite3
@@ -56,18 +57,20 @@ INACTIVE_SUBSCRIPTION_CONTENT = _stub_content(
     "Подписка закончилась",
     "Продлите её в нашем ТГ-боте",
 )
+# 18.10.26 (владелец): суточный триал сайта кончился — зовём в бота за 14 бесплатными днями, а не сразу платить:
+# бота человек ещё не видел, а за 13–17.10 по старой «Оплата: …/pay» нажали 3 из 132 забравших подписку
 TRIAL_OVER_CONTENT = _stub_content(
-    "Пробный период закончился",
-    "Оплата: horizancevpn.com/pay",
-    "или в ТГ-боте:",
+    "Пробный день закончился",
+    f"Ещё {settings.trial_days} дней бесплатно",
+    "в нашем Telegram-боте:",
     "@horizance_vpn_bot",
 )
 # Строки заглушки в Happ не кликабельны, поэтому истёкшему триалу ещё и
 # меняем заголовки: кнопка «веб-страница» профиля и баннер ведут на оплату.
 TRIAL_OVER_PAY_URL = f"https://{credentials.SUBSCRIPTION_DOMAIN}/go/pay?src=happ_trial_over"  # бот, иначе /pay (go.py)
 TRIAL_OVER_ANNOUNCE = (
-    f"Пробный период закончился. Подписка от {settings.default_price} ₽ в месяц — "
-    f"{credentials.SUBSCRIPTION_DOMAIN}/pay или в боте @Horizance_vpn_bot"
+    f"Пробный день закончился. Ещё {settings.trial_days} дней бесплатно — в нашем Telegram-боте "
+    f"@Horizance_vpn_bot, без оплаты"
 )
 
 # Что отдаём устройству, которому device_guard отказал. Ключей в ответе нет —
@@ -84,10 +87,13 @@ DEVICE_REFUSAL_CONTENT = {
         "владельцем подписки",
         "Вернуть: /devices в ТГ-боте",
     ),
+    # 22.10.26: как у истёкшего триала — зовём за бесплатными днями в бота (за 15–21.10 повторный триал пытались взять
+    # 34 устройства, в бот из них пришли 5)
     "trial_reuse": _stub_content(
-        "Пробный период на этом",
-        "устройстве уже был",
-        "Подписка — в нашем ТГ-боте",
+        "Пробный день здесь уже был",
+        f"Ещё {settings.trial_days} дней бесплатно",
+        "в нашем Telegram-боте:",
+        "@horizance_vpn_bot",
     ),
     "banned": _stub_content("Доступ заблокирован"),
 }
@@ -103,14 +109,14 @@ EN_INACTIVE_SUBSCRIPTION_CONTENT = _stub_content(
     "Renew it in our Telegram bot",
 )
 EN_TRIAL_OVER_CONTENT = _stub_content(
-    "Free trial has ended",
-    "Pay: horizancevpn.com/pay",
-    "or in Telegram:",
+    "Your free day has ended",
+    f"{settings.trial_days} more days free in",
+    "our Telegram bot:",
     "@horizance_vpn_bot",
 )
 EN_TRIAL_OVER_ANNOUNCE = (
-    f"Your free trial has ended. Subscription from ${settings.CRYPTO_PRICE_USD[settings.default_price]} per month — "
-    f"{credentials.SUBSCRIPTION_DOMAIN}/pay or the bot @Horizance_vpn_bot"
+    f"Your free day has ended. Get {settings.trial_days} more days free in our Telegram bot "
+    f"@Horizance_vpn_bot — no payment needed"
 )
 EN_DEVICE_REFUSAL_CONTENT = {
     "device_limit": _stub_content(
@@ -123,9 +129,10 @@ EN_DEVICE_REFUSAL_CONTENT = {
         "Restore: /devices in bot",
     ),
     "trial_reuse": _stub_content(
-        "This device already",
-        "had a free trial",
-        "Subscribe in Telegram bot",
+        "Free day already used here",
+        f"{settings.trial_days} more days free in",
+        "our Telegram bot:",
+        "@horizance_vpn_bot",
     ),
     "banned": _stub_content("Access blocked"),
 }
@@ -134,6 +141,13 @@ EN_DEVICE_REFUSAL_CONTENT = {
 def _sub_is_english(user: dict | None, request: Request) -> bool:
     """Язык заглушек и баннера в Happ: у пользователя бота — по его профилю (как в боте), у триала сайта
     и неизвестной ссылки профиля нет — по запросу (request.state.en, app.site_language)."""
+    if user is not None and str(user.get("user_id", "")).startswith("t_"):
+        # триал сайта: язык записан при выдаче; у старых (до 18.10.26) — по стране адреса, с которого его взяли
+        if user.get("language") in ("en", "ru"):
+            return user["language"] == "en"
+        from i18n import _country
+        ip = (user.get("client_ip") or "").split("|")[0].strip()
+        return bool(ip) and _country(ip) not in ("RU", None)
     if user is not None and "language" in user:
         from types import SimpleNamespace
         from i18n import is_english
@@ -660,6 +674,9 @@ tags=["users"], # Для документации (Swagger UI)
 )
 routing_cache = RoutingCache()
 
+_VPN_APP_UA = re.compile(r"(Happ|INCY|v2rayNG|v2RayTun|Hiddify|Streisand|FoXray|Karing|ClashMi|sing-box|V2Box|Shadowrocket)/", re.I)
+
+
 @router.get("/vpn/{client_uuid}")
 async def get_happ_link(request: Request, client_uuid: str, app: str = "happ"):
     """Отдаёт страницу, которая сама пытается открыть Happ по зашифрованной
@@ -672,6 +689,10 @@ async def get_happ_link(request: Request, client_uuid: str, app: str = "happ"):
     # ссылку копируют из Telegram руками и иногда захватывают пробел:
     # 24.09.26 '/vpn/ be44e52f…' упал с KeyError вместо страницы
     client_uuid = client_uuid.strip()
+    # Адрес этой страницы копируют и добавляют в Happ как подписку — тогда приложение получало HTML вместо серверов и
+    # VPN молча не работал (18.10.26: ~15 подписок, у L3qex с 08.10 ни одного подключения). VPN-приложению — подписка.
+    if _VPN_APP_UA.match(request.headers.get("user-agent", "")):
+        return await get_client_config(client_uuid, request)
     sub_url = f"https://{credentials.SUBSCRIPTION_DOMAIN}/sub/{client_uuid}"
     happ_url = await get_happ_encrypted_link(sub_url)
     logger.debug(f"Успешно зашифрована ссылка для uuid={client_uuid}")
@@ -760,7 +781,7 @@ async def get_client_config (
             content = EN_INACTIVE_SUBSCRIPTION_CONTENT if en else INACTIVE_SUBSCRIPTION_CONTENT
     else:
         trial_user = get_user_by_uuid('trial_sessions', client_uuid)
-        en = _sub_is_english(None, request)
+        en = _sub_is_english(dict(trial_user) if trial_user else None, request)
         if trial_user:
             logger.debug(f"Trial uuid найден, trial user: {dict(trial_user)}")
             refusal = await update_device_binding('trial_sessions', trial_user, request)
@@ -775,6 +796,10 @@ async def get_client_config (
             content = EN_STALE_SUBSCRIPTION_CONTENT if en else STALE_SUBSCRIPTION_CONTENT
     if refusal:
         content = (EN_DEVICE_REFUSAL_CONTENT if en else DEVICE_REFUSAL_CONTENT)[refusal]
+        if refusal == "trial_reuse" and headers:
+            headers["profile-web-page-url"] = TRIAL_OVER_PAY_URL.replace("happ_trial_over", "happ_trial_reuse")
+            headers["announce"] = "base64:" + base64.b64encode(
+                (EN_TRIAL_OVER_ANNOUNCE if en else TRIAL_OVER_ANNOUNCE).encode()).decode()
     if headers and no_routing:
         headers["routing-enable"] = "0"
     if headers and is_happ and _is_legacy_host(request):

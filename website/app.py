@@ -50,9 +50,11 @@ async def site_language(request: Request, call_next):
     request.state.en = False
     forced = request.query_params.get("lang") or request.cookies.get("hz_lang")
     path = request.url.path
-    if forced in ("en", "ru"):
+    if path == "/en" or path.startswith("/en/"):
+        request.state.en = True  # английский адрес (templates_env.EN_PAGES) — всегда по-английски, и роботам тоже
+    elif forced in ("en", "ru"):
         request.state.en = forced == "en"
-    elif (request.method == "GET" and not path.startswith(("/static", "/api/payments", "/api/t", "/go"))
+    elif (request.method == "GET" and (not path.startswith(("/static", "/api/payments", "/api/t", "/go")) or path == "/go/pay")
           and not _BOT_UA.search(request.headers.get("user-agent", ""))):
         accept = request.headers.get("accept-language", "")
         primary = accept.split(",")[0].split(";")[0].strip().lower().split("-")[0]

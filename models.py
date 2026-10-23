@@ -75,6 +75,10 @@ def _subscription_defaults() -> dict:
         'extra_devices_until': None,
         # 1 — опция «доп. устройства» подключена и продлевается вместе с подпиской (settings.EXTRA_DEVICES_*)
         'extra_devices': 0,
+        # трафик (МБ, in+out) и дата (dd.mm.yy) последней оплаты подписки: заплатил, а VPN почти не пользуется —
+        # settings._paid_not_using, utils.report_paid_not_using (владелец 18.10.26)
+        'paid_traffic_mb': None,
+        'paid_date': None,
     }
 
 
@@ -161,7 +165,8 @@ class TrialUser:
         fingerprint,
         device_os,
         client_uuid,
-        client_ip
+        client_ip,
+        language=None,
     ):
         now = datetime.now(timezone.utc)
         self.user_id = user_id
@@ -175,3 +180,4 @@ class TrialUser:
         )
         self.traffic_in = None
         self.traffic_out = None
+        self.language = language  # 'en' | 'ru' — язык сайта при выдаче (заглушки Happ), с 18.10.26

@@ -33,7 +33,16 @@
          class="block w-full bg-surface2 border border-line2 rounded-xl py-3 text-sm text-dim">
         {{ t('Уже установлено — попробовать снова', 'Already installed — try again') }}
       </a>
-      {% if is_ios and app_name == "Happ" and not is_en() %}{% include "_ios_appstore_fallback.html" %}{% endif %}
+      {% if is_ios and app_name == "Happ" and not is_en() %}{% include "_ios_appstore_fallback.html" %}
+      {% else %}
+      {# 23.10.26: на Windows здесь были только «Скачать» и «Попробовать снова» — у кого приложение уже стоит
+         или не открылось по ссылке, ключа взять было неоткуда (Ольга, @Olga_legos) #}
+      <div class="mt-4 text-left bg-surface2 border border-line2 rounded-xl px-4 py-4">
+        <p class="text-xs text-dim mb-2">{{ t('Приложение уже установлено, но не открылось? Скопируйте адрес подписки и добавьте его в приложении как подписку:',
+                                              'App already installed but did not open? Copy the subscription address and add it in the app as a subscription:') }}</p>
+        {% include "_sub_url_copy.html" %}
+      </div>
+      {% endif %}
     </div>
 
     <script>

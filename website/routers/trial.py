@@ -39,9 +39,15 @@ def build_os_buttons(src: str = "-") -> list[tuple[str, str, str, bool]]:
     return result
 
 async def get_ip_location(ip: str) -> dict:
-    async with httpx.AsyncClient() as client:
-        r = await client.get(f"http://ip-api.com/json/{ip}?fields=status,country,regionName,city,isp,hosting,query")
-        data = r.json()
+    """{} — если ip-api.com не ответил: город нужен только для справки, выдачу триала он ронять не должен
+    (23.10.26 20:23 ConnectTimeout → 500 на /trial/connect, человек остался без доступа)."""
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            r = await client.get(f"http://ip-api.com/json/{ip}?fields=status,country,regionName,city,isp,hosting,query")
+            data = r.json()
+    except (httpx.HTTPError, ValueError) as e:
+        logger.warning(f"ip-api.com не ответил для {ip}: {e!r}")
+        return {}
 
     if data.get("status") != "success":
         return {}
@@ -82,6 +88,7 @@ TRIAL_FAQ = {
         "подключите Telegram-бота.",
 }
 
+@router.get("/en/trial")  # английская версия на своём адресе (templates_env.EN_PAGES), state.en ставит app.site_language
 @router.get("/trial")
 async def trial_page(request: Request, src: str | None = None):
     if src:
@@ -131,17 +138,23 @@ async def trial_connect(request: Request):
     user_id=f"t_{str(uuid.uuid4())[:8]}" # "t_" отличает trial от обычных юзеров
     client_uuid = await _vpn.setup_xray_for_trial(user_id)
 
-    client_location = (
-        client_location_data["region"],
-        client_location_data["city"]
+    client_ip_and_location = (
+        f"{client_ip}|{(client_location_data['region'], client_location_data['city'])}"
+        if client_location_data else client_ip  # как в vpn.py: без города, если ip-api.com не ответил
     )
-    client_ip_and_location = f"{client_ip}|{client_location}"
+    # язык заглушек Happ этого триала (18.10.26: пакистанцу плашка пришла по-русски): выбор переключателем,
+    # иначе — язык браузера не русский и страна не Россия (то же правило, что app.site_language)
+    forced = request.cookies.get("hz_lang")
+    accept = request.headers.get("accept-language", "").split(",")[0].split(";")[0].strip().lower().split("-")[0]
+    english = forced == "en" if forced in ("en", "ru") else (
+        bool(accept) and accept not in ("ru", "uk", "be", "kk") and client_location_data.get("country") != "Russia")
     _db.add_trial_session(
         user_id=user_id,
         fingerprint=None,
         device_os=None,
         client_uuid=client_uuid,
-        client_ip=client_ip_and_location
+        client_ip=client_ip_and_location,
+        language="en" if english else "ru",
     )
     logger.info(f"{user_id}: выдан триал, client_uuid={client_uuid}")
 

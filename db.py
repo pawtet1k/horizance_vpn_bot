@@ -58,7 +58,9 @@ class UserManager:
         traffic_period_date TEXT,
         notifications TEXT,
         extra_devices_until TEXT,
-        extra_devices INTEGER DEFAULT 0
+        extra_devices INTEGER DEFAULT 0,
+        paid_traffic_mb INTEGER,
+        paid_date TEXT
     '''
 
     def create_table(self):
@@ -97,7 +99,8 @@ class UserManager:
                 self.execute_query(f"ALTER TABLE {table} ADD COLUMN traffic_period_date TEXT")
             except sqlite3.OperationalError:
                 pass
-            for column in ("extra_devices_until TEXT", "extra_devices INTEGER DEFAULT 0"):
+            for column in ("extra_devices_until TEXT", "extra_devices INTEGER DEFAULT 0",
+                           "paid_traffic_mb INTEGER", "paid_date TEXT"):
                 try:
                     self.execute_query(f"ALTER TABLE {table} ADD COLUMN {column}")
                 except sqlite3.OperationalError:
@@ -356,9 +359,14 @@ class UserManager:
             created_at  TEXT NOT NULL,
             expires_at  TEXT NOT NULL,
             traffic_in INTEGER,
-            traffic_out INTEGER
+            traffic_out INTEGER,
+            language TEXT
         )'''
         self.execute_query(query)
+        try:  # 18.10.26: язык сайта при выдаче триала (заглушки и баннер Happ иностранцу — по-английски)
+            self.execute_query('ALTER TABLE trial_sessions ADD COLUMN language TEXT')
+        except sqlite3.OperationalError:
+            pass  # колонка уже есть
         logger.debug('Таблица trial_sessions загружена.')
 
     def add_trial_session(self, **kwargs) -> None:

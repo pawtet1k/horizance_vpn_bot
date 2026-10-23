@@ -31,6 +31,17 @@ async def index_page(request: Request):
     # иностранцу — короткая английская главная (index_en.html); роботам и русским — index.html (app.site_language)
     return templates.TemplateResponse(request, "index_en.html" if request.state.en else "index.html", {})
 
+
+@router.get("/en/")
+async def index_page_en(request: Request):
+    # английская главная на своём адресе — для поиска (hreflang в base.html); app.site_language ставит state.en
+    return templates.TemplateResponse(request, "index_en.html", {})
+
+
+@router.get("/en")
+async def index_page_en_slash():
+    return RedirectResponse("/en/", status_code=301)
+
 def safe_next(url: str | None) -> str:
     """Куда вернуть после входа (?next=). Только путь на нашем сайте:
     «//evil.com» и «/\\evil.com» браузер считает чужим доменом."""

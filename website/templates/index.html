@@ -15,16 +15,7 @@
 {% block canonical %}https://horizancevpn.com/{% endblock %}
 
 {% block extra_head %}
-<style>
-  /* ═══ Hero-анимация «поток через тоннель» (canvas, скрипт в конце страницы):
-     слева — открытый трафик читаемыми строками, в центре — кольцо-вход
-     в туннель, справа — тот же поток снаружи: волны нечитаемого шифра.
-     Маска гасит сцену у краёв контейнера, чтобы поток «приходил из ниоткуда». ═══ */
-  .hero-stream {
-    -webkit-mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
-    mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
-  }
-</style>
+
 {% endblock %}
 
 {% block content %}
@@ -72,18 +63,7 @@
     <p class="text-xs text-faint mt-6">Без банковской карты для теста · Отмена в любой момент</p>
   </div>
 
-  <!-- ═══ Анимированная сцена «поток через тоннель»: слева — открытый трафик,
-       который видит провайдер (читаемые строки стягиваются в жерло), в центре —
-       светящееся кольцо-вход в туннель Horizance, справа — тот же поток снаружи:
-       колышущиеся волны нечитаемого шифра. Рисуется скриптом в конце страницы;
-       при prefers-reduced-motion выводится один статичный кадр. ═══ -->
-  <div class="relative mt-10" aria-hidden="true">
-    <canvas id="hero-stream" class="hero-stream block w-full max-w-6xl mx-auto h-40 md:h-[270px]"></canvas>
-    <div class="max-w-6xl mx-auto px-6 mt-3 flex justify-between font-mono text-[10px] md:text-xs tracking-[0.2em] select-none">
-      <span class="text-[#7f1d1d]">БЕЗ VPN · ТРАФИК ЧИТАЕМ</span>
-      <span class="text-[#4d7c0f]">С HORIZANCE · ШИФР</span>
-    </div>
-  </div>
+  {% include "_hero_stream.html" %}
 </section>
 
 <script>

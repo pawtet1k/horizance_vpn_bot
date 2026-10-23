@@ -27,16 +27,22 @@
 <!-- ═══════════════ SEO: title/description заполняются в дочерних шаблонах ═══════════════ -->
 <title>{% block title %}Horizance VPN — быстрый и стабильный VPN для России{% endblock %}</title>
 <meta name="description" content="{% block meta_description %}Horizance VPN — личный VPN на протоколе VLESS Reality. Обходит блокировки, работает в России, для Android, iOS, Windows и Telegram. Подключение за 2 минуты.{% endblock %}"/>
-<meta name="keywords" content="{% block meta_keywords %}vpn, впн, vpn россия, бесплатный vpn, vpn для андроид, vpn для айфона, vless, reality{% endblock %}"/>
+<meta name="keywords" content="{% block meta_keywords %}{{ t('vpn, впн, vpn россия, бесплатный vpn, vpn для андроид, vpn для айфона, vless, reality', 'vpn, vless, reality, vpn for android, vpn for iphone, vpn free trial') }}{% endblock %}"/>
 <meta name="robots" content="{% block robots %}index, follow{% endblock %}"/>
 <link rel="canonical" href="{% block canonical %}https://horizancevpn.com/{% endblock %}"/>
+{% set alts = lang_alternates(request.url.path) %}
+{% if alts %}{# hreflang: русская и английская версии страницы ссылаются друг на друга (18.10.26) #}
+<link rel="alternate" hreflang="ru" href="https://horizancevpn.com{{ alts.ru }}"/>
+<link rel="alternate" hreflang="en" href="https://horizancevpn.com{{ alts.en }}"/>
+<link rel="alternate" hreflang="x-default" href="https://horizancevpn.com{{ alts.ru }}"/>
+{% endif %}
 
 <!-- Open Graph / соцсети -->
 <meta property="og:type" content="website"/>
-<meta property="og:locale" content="ru_RU"/>
+<meta property="og:locale" content="{{ t('ru_RU', 'en_US') }}"/>
 <meta property="og:site_name" content="Horizance VPN"/>
-<meta property="og:title" content="{% block og_title %}Horizance VPN — быстрый и стабильный VPN для России{% endblock %}"/>
-<meta property="og:description" content="{% block og_description %}Личный VPN на протоколе VLESS Reality. Стабильное подключение, работает на всех платформах.{% endblock %}"/>
+<meta property="og:title" content="{% block og_title %}{{ t('Horizance VPN — быстрый и стабильный VPN для России', 'Horizance VPN — fast, stable VPN on VLESS Reality') }}{% endblock %}"/>
+<meta property="og:description" content="{% block og_description %}{{ t('Личный VPN на протоколе VLESS Reality. Стабильное подключение, работает на всех платформах.', 'A personal VPN on VLESS Reality. Stable connection on every platform.') }}{% endblock %}"/>
 <meta property="og:image" content="{% block og_image %}https://horizancevpn.com/static/img/logo.png{% endblock %}"/>
 <meta property="og:url" content="{{ self.canonical() }}"/>
 
@@ -211,11 +217,7 @@
     </div>
 
     <!-- Кнопки — иконки Font Awesome с подписью, подпись скрывается в portrait/мобильном режиме, чтобы влезало на одной линии -->
-    <div class="flex items-center gap-1.5 sm:gap-3">
-      {# переключатель языка (11.10.26): запоминается в cookie hz_lang (app.site_language); nofollow — роботам русская версия #}
-      <a href="{{ request.url.path }}?lang={{ t('en', 'ru') }}" rel="nofollow"
-         class="shrink-0 text-xs font-semibold text-dim border border-line2 rounded-xl px-1.5 sm:px-2.5 py-2 hover:border-faint hover:text-ink transition-colors"
-         aria-label="{{ t('Switch to English', 'Переключить на русский') }}" title="{{ t('English', 'Русский') }}">{{ t('EN', 'RU') }}</a>
+    <div class="flex items-center gap-2 sm:gap-3">
       {% block header_cta %}
       <a href="/blog"
          class="flex items-center gap-2 text-sm font-semibold text-ink2 border border-line2 rounded-xl px-3 py-2 hover:border-faint hover:bg-surface2 transition-colors"
@@ -239,6 +241,17 @@
     </div>
   </nav>
 </header>
+
+{# переключатель языка — под шапкой (владелец 18.10.26: в шапке на iPhone 12 вплотную к логотипу). Выбор — в cookie
+   hz_lang (app.site_language); nofollow — роботам русская версия. #}
+<div class="w-full max-w-6xl mx-auto px-6 pt-3 flex justify-end">
+  {# у страниц с парой (EN_PAGES) — обычная ссылка на пару: по ней ходит робот и передаётся вес между версиями #}
+  <a href="{% if alts %}{{ alts[t('en', 'ru')] }}{{ t('', '?lang=ru') }}{% else %}{{ request.url.path }}?lang={{ t('en', 'ru') }}{% endif %}"{% if not alts %} rel="nofollow"{% endif %}
+     class="inline-flex items-center gap-1.5 text-xs font-semibold text-dim border border-line2 rounded-lg px-2.5 py-1.5 hover:border-faint hover:text-ink transition-colors"
+     aria-label="{{ t('Switch to English', 'Переключить на русский') }}">
+    <span aria-hidden="true">{{ t('🇬🇧', '🇷🇺') }}</span>{{ t('EN', 'RU') }}
+  </a>
+</div>
 
 <!-- ═══════════════ ОСНОВНОЙ КОНТЕНТ СТРАНИЦЫ ═══════════════ -->
 <main class="flex-1">
@@ -314,7 +327,7 @@
     </div>
     <h2 id="coming-soon-title" class="text-lg font-semibold mb-2">{{ t('Скоро будет доступно', 'Coming soon') }}</h2>
     <p class="text-dim text-sm mb-4 leading-relaxed" id="coming-soon-text">
-      Эта функция ещё в разработке.
+      {{ t('Эта функция ещё в разработке.', 'This feature is still in development.') }}
     </p>
     <!-- подсказка только для кнопок входа: сейчас работает лишь вход через
          Telegram; кому Telegram не открывается — сутки бесплатно на /trial.

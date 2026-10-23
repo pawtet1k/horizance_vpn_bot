@@ -188,6 +188,10 @@ existing tone/emoji conventions) unless told otherwise.
   отвечают по-английски. Бот — `i18n.py` (`is_english`, `tr(user|id, ru, en)`), сайт — middleware `site_language` в
   `website/app.py` → `request.state.en`, в шаблонах `{{ t(ru, en) }}` / `is_en()`. Поисковым роботам всегда русская версия.
   Новый пользовательский текст пиши сразу в двух языках.
+- **С 18.10.26 у главной и /trial есть английские адреса `/en/` и `/en/trial`** (`templates_env.EN_PAGES`, hreflang в base.html,
+  как в Watoto) — они всегда по-английски, в том числе роботам, и в sitemap. Остальные страницы по-прежнему переводятся на том же адресе.
+- Язык триала с сайта — `trial_sessions.language` (пишется в `/trial/connect`); по нему заглушки и баннер Happ (`vpn._sub_is_english`).
+  Заглушка истёкшего суточного триала зовёт в бота за 14 бесплатными днями, а не «оплатить» (18.10.26).
 - **Перед любым сообщением пользователю — прочитать `docs/USER_COMMUNICATION_RULES.md`.**
 - **Переписка с пользователями** — только через `utils.send_telegram_api_message`: он пишет каждое сообщение в дневной лог
   строкой «Ответ техподдержки для <id>: …». Ручные сообщения до 11.10 — в `my_logger/info/support_restored.log`.
@@ -255,3 +259,55 @@ existing tone/emoji conventions) unless told otherwise.
 - **Доступность нод**: `node_monitor.run_uptime_probe` — раз в минуту TCP к :443 каждой ноды с NL → `my_logger/stats/node_uptime.csv`;
   отчёт `python3 analytics/uptime.py [дней]` (% по нодам, «сервис» = хотя бы одна нода). ssh-таймауты бота ≠ простой VPN:
   15.10 DE/KZ обслуживали клиентов, а у RU 14:50–15:01 UTC подключения упали почти до нуля при живом xray — проба с NL такое не видит.
+
+### 18–19.10.2026: защита SSH, права на логи, «заплатил и не пользуется», /vpn как подписка
+- **fail2ban на всех 6 нодах** — одна настройка `/etc/fail2ban/jail.d/horizance-sshd.local` (как была на MX): белый список IP всех
+  нод, 5 ошибок за 10 мин → бан 1 ч, повторно до недели; `port` = реальный порт sshd ноды (**NL 9753, DE 9775**, остальные 22).
+  Подбор пароля шёл непрерывно, сколько хватает логов (с 01.09). Журналы неудачных входов `btmp` очищены 19.10. Чужих успешных входов
+  с 20.09 нет; 45.215.x.x — сам владелец (Airtel Zambia, адрес меняется, в белом списке НЕТ).
+- **access.log на US и KZ** читается без sudo: файл `nobody:adm 640`, пользователь ssh в группе `adm`. Каталог `/var/log/xray`
+  оставлять 755 — xray пишет от `nobody`.
+- **Заплатил и не пользуется** (`settings.paid_not_using`): при оплате пишутся `users.paid_traffic_mb`/`paid_date`; на 2-й день,
+  если прибавилось <50 МБ, — напоминание с кнопкой настройки; на 4-й — список владельцу (`utils.report_paid_not_using`), дальше лично.
+- **`/vpn/<uuid>` для VPN-приложения отдаёт подписку** (`vpn._VPN_APP_UA`): адрес страницы добавляли в Happ вместо `/sub/`, и
+  приложение получало HTML — VPN молча не работал (~15 подписок, у L3qex с 08.10).
+
+### 19.10.2026: нода NL2 (Oracle, Амстердам)
+- **NL2 158.178.156.159** — Oracle Always Free VM.Standard.E2.1.Micro (1 OCPU AMD / 1 ГБ + 1 ГБ swap, диск 50 ГБ), тенант
+  cacinternational (`~/oracle_automation/acct2/config.local`), eu-amsterdam-1. Седьмая нода в `credentials.SERVERS`, role `default`:
+  REALITY `dest` = `www.horizance.ru:443`, `xver` 0 (чужой на IP видит настоящий сайт horizance.ru). Вход **только по ключу**
+  `keys/nl2.key` (`ssh_key_path`, пароля нет; `keys/` в .gitignore), sudo без пароля, fail2ban как на остальных (порт 22).
+  В iptables Oracle открыт только 443 (+22); 8443 (xhttp) снаружи закрыт.
+- **`deploy_xray.py NAME [NAME…]`** — только названные ноды (раньше `main()` молча шёл по SERVERS[1..3] и перезапускал xray на
+  рабочих нодах; без аргументов теперь печатает список и выходит). Вход по паролю или `ssh_key_path` (`vpn.ssh_connect_kwargs`).
+  Кроме xray делает: `ensure_port_443` (iptables образов Oracle), `ensure_fail2ban` (ставит и **перезаписывает**
+  `jail.d/horizance-sshd.local`, белый список = все `SERVERS[*].host`, `port` = порт ноды), `ensure_log_access`
+  (access.log `<user xray>:adm 640`, ssh-пользователь в `adm`, logrotate copytruncate). На NL2 xray работает от пользователя `xray`
+  (новый установщик), на старых нодах — `nobody`.
+- **`restore_users.clients_to_restore` теперь пропускает `device_guard.banned_users()`**: раньше deploy_xray/geo_assets возвращали
+  в xray ключи, отключённые сторожом раздачи, до следующего цикла node_monitor (найдено на NL2: 5552137646).
+
+### 22.10.2026: вебхуки NOWPayments, заглушка повторного триала
+- **Ни один настоящий вебхук NOWPayments не прошёл проверку подписи** (17.08, 24.08, 21.10; проходили только тестовые 888xxx).
+  Причина не найдена. Теперь при неверной подписи `/api/payments/nowpayments/webhook` пишет сырое тело в лог и берёт статус из
+  API по `payment_id` (`nowpayments.get_payment_status`), вебхуку не верит, как с UDM Pay. Когда в логе появится тело — сверить
+  подпись и починить `verify_webhook_signature`.
+- Заглушка повторного триала (`trial_reuse`) тоже зовёт за 14 бесплатными днями в бота, кнопка/баннер — `/go/pay?src=happ_trial_reuse`.
+- Оплаты попавших в сбой UDM Pay перенесены на день первой попытки и для malervisuals, V2711v2, ekaterinanikolaeva1957
+  (`stats_growth.MOVED_TO_ATTEMPT`, строки Notion 12–21.10 обновлены).
+- **Графики статистики — в Google Таблице** «Horizance VPN — метрики по дням» (id `1QNeuAOs3SfFVQt9W-0VTRV8MP_LipiNASbBQh8W_klE`),
+  `sheets_daily_stats.py`, cron 00:55 (после `notion_daily_stats.py` в 00:50): листы «Дни», «Недели», «Как считается» переписываются целиком,
+  графики пересоздаются. Доступ — сервисный аккаунт `googlesheets@driven-realm-431222-h1` (ключ `~/driven-realm-431222-h1-89dc926e24ee.json`,
+  библиотека google-auth). На бесплатном Notion графики не видны (владелец 24.10.26) — базы «Дни»/«Недели» в Notion удалены, страница Notion
+  осталась с таблицей и автоабзацем. «*» — `stats_growth.MOVED_TO_ATTEMPT` (перенос на первую попытку) и `FORECAST_UNPAID` (не оплатили после
+  сбоя, засчитаны наперёд; оплатят — перенести в MOVED_TO_ATTEMPT).
+- **Без Telegram оплатить нельзя**: оплата на сайте требует входа, а вход только через Telegram (бот/QR или виджет). Кнопки
+  Google/Яндекс/VK/логин — заглушки (письмо владельцу «клик по кнопке входа»), в октябре нажали 29 раз.
+
+
+### 23–24.10.2026: ключ на странице подключения, ошибки бота — владельцу
+- **`/vpn/<uuid>` показывает адрес подписки с «Копировать» на всех устройствах** (`_sub_url_copy.html`), раньше — только на iPhone.
+  На Windows/Android/Mac там были только «Скачать Happ / попробовать снова»: 26.08–23.10 так не подключились 67 человек (64 триала сайта + 3 бота).
+- **Ошибка в обработчике бота — письмо владельцу** (`main.safe_handler` → `website/error_alerts.notify`, не чаще раза в 30 мин на обработчик+ошибку).
+- **Команда или текст раньше /start** (меню бота, вход по QR с «Отмена») — человек сначала заводится как при /start; раньше /config и /pay падали на None.
+- `/trial/connect` не падает, если ip-api.com не ответил (триал выдаётся без города).

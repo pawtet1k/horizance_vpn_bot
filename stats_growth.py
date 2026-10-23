@@ -44,6 +44,20 @@ MOVED_TO_ATTEMPT = [
     (140785730, date(2026, 10, 16), date(2026, 10, 13), False),
     (5295076397, date(2026, 10, 16), date(2026, 10, 14), True),
     (1682224052, date(2026, 10, 17), date(2026, 10, 15), False),
+    # 22.10.26 (владелец): остальные из попавших в сбой, кто оплатил позже, — тоже на день первой попытки
+    (616093378, date(2026, 10, 19), date(2026, 10, 12), True),    # malervisuals
+    (2036601143, date(2026, 10, 17), date(2026, 10, 13), True),   # V2711v2
+    (2077923228, date(2026, 10, 17), date(2026, 10, 16), True),   # ekaterinanikolaeva1957
+]
+# Попали в сбой UDM Pay и так и не оплатили — засчитаны наперёд на день первой попытки (решение владельца 23.10.26: без
+# сбоя они бы заплатили, графики должны показывать спрос). Только «Все оплаты» и «Новые плательщики» — удержание,
+# активные и конверсия их не видят. В Notion — «*». Если человек всё-таки оплатит, прогноз снимается сам (оплата
+# встанет на реальный день — тогда перенести её в MOVED_TO_ATTEMPT и убрать строку отсюда).
+# (user_id, день первой попытки)
+FORECAST_UNPAID = [
+    (307069466, date(2026, 10, 11)),   # YuliaBelaslaArt
+    (33670846, date(2026, 10, 11)),    # porcelainrabbit
+    (466446017, date(2026, 10, 11)),   # IDizaaart
 ]
 ACTIVATED = re.compile(r"^\S+ (\d\d-\w{3}-\d\d) INFO: (\d+): подписка активирована через (UDM Pay|NOWPayments|Whop)")
 # цена конкретной оплаты: activate_paid_subscription пишет её строкой «Данные» прямо перед «активирована» (с 30.09.26;
@@ -111,6 +125,10 @@ def collect(db_path="users.db"):
             first[min(days)] += 1
             if first_price != 999:
                 newcomers[uid] = (paid_until[uid], sorted(days))
+    for uid, attempt_day in FORECAST_UNPAID:
+        if uid not in paid_days:
+            pay[attempt_day] += 1
+            first[attempt_day] += 1
     cohort = [(sd, pp) for sd, pp, _ in users.values()]
     return bot, tri, pay, first, cohort, paid_days, newcomers, attempts
 

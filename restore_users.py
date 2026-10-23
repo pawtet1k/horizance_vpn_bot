@@ -2,6 +2,7 @@
 import asyncio
 import json
 import credentials
+import device_guard
 from db import UserManager
 from vpn import VPNManager
 from my_logger import logger
@@ -16,8 +17,13 @@ def clients_to_restore(table_name, user_manager) -> list[dict]:
     списком то, что реально есть на ноде.
     """
     users_data = []
+    # ключи, отключённые сторожом раздачи или блок-листом, не возвращаем:
+    # иначе deploy_xray / geo_assets включали их обратно до следующего цикла node_monitor
+    banned = device_guard.banned_users()
     users: list[dict] = user_manager.get_users_with_uuid(table_name)
     for user in users:
+        if str(user['user_id']) in banned:
+            continue
         if not str(user['user_id']).startswith("t_"):
             if user.get('status') == 'inactive':
                 continue

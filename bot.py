@@ -29,10 +29,13 @@ HELP_FAQ = {
         "📱 Ещё одно устройство", "📱 Another device",
         "Отправьте боту /config и выберите систему нового устройства — бот пришлёт инструкцию и ссылку, "
         "откройте её на этом устройстве. Подписка остаётся одна, в неё входят 3 устройства.\n\n"
-        "Места нет — команда /devices: там можно убрать старое устройство или подключить ещё 3 за +99 ₽ в месяц к подписке.",
+        "Места нет — команда /devices: там можно убрать старое устройство или подключить ещё 3 за +99 ₽ в месяц к подписке.\n\n"
+        "Две системы на одном компьютере (macOS и Windows) — это два устройства: приложение в каждой системе передаёт свой "
+        "идентификатор.",
         "Send /config to the bot and pick the new device's system — the bot will send instructions and a link, "
         "open it on that device. It is the same subscription; it includes 3 devices.\n\n"
-        "No free slot? Send /devices: remove an old device there or add 3 more to your subscription.",
+        "No free slot? Send /devices: remove an old device there or add 3 more to your subscription.\n\n"
+        "Two systems on one computer (macOS and Windows) count as two devices: the app in each system sends its own ID.",
     ),
     "cabinet": (
         "🌐 Личный кабинет на сайте", "🌐 Account on the website",
@@ -113,9 +116,10 @@ def plan_choice_buttons(exclude_price=None, english=False, extra=False):
         total = price + (settings.get_extra_devices_price(price) if extra else 0)
         if not english:
             return f"{ru} — {total} ₽" + (f" (с {settings.EXTRA_DEVICES_COUNT} доп. устройствами)" if extra else "")
-        usd = settings.CRYPTO_PRICE_USD.get(price)
-        usd = round(usd * total / price, 2) if usd else None
-        return f"{en} — {total} ₽" + (f" (≈ ${usd})" if usd else "") + (" incl. extra devices" if extra else "")
+        # иностранцу — только доллары (владелец 18.10.26); скидка года — от долларовых цен
+        usd = settings.to_usd(total, price)
+        sale = f" (−{settings.yearly_discount_percent_usd}%)" if price == settings.yearly_price else ""
+        return f"{en.split(' (')[0]} — ${usd}{sale}" + (" incl. extra devices" if extra else "")
     return [
         [Button.inline(label(price, ru, en), data=data)]
         for price, ru, en, data in PLAN_OPTIONS
@@ -296,7 +300,7 @@ async def show_devices(vpn_bot, user_id, user_manager):
                                           data="extra_on")])
         else:
             buttons.append([Button.inline(tr(user, f"➕ Ещё {n} устройства — +{addon} ₽ к подписке",
-                                             f"➕ {n} more devices — added to your subscription"),
+                                             f"➕ {n} more devices — +${settings.to_usd(addon, user.price)} to your subscription"),
                                           data="extra_buy")])
     await vpn_bot.send_message(user_id, "\n".join(lines), buttons=buttons)
 
@@ -411,6 +415,9 @@ async def handle_start(event, vpn_bot, user_id, user_manager, subscription_manag
         if payload.startswith(settings.SITE_START_PREFIX):
             logger.info(f'Пришёл с сайта: {payload[len(settings.SITE_START_PREFIX):]}.')
             return settings.OWNER_TELEGRAM_ID
+        if payload.startswith(settings.WEB_LOGIN_PREFIX):  # впервые пришёл по QR входа на сайт (main.start)
+            logger.info('Пришёл с сайта: вход по QR.')
+            return settings.OWNER_TELEGRAM_ID
         try:
             referrer_id = int(payload)
         except ValueError:
@@ -498,7 +505,7 @@ async def handle_start(event, vpn_bot, user_id, user_manager, subscription_manag
         ]
         # тариф показываем только тут - в общем виде (независимо от того,
         # настроено продление или нет) это поле не нужно
-        subscription_status = (f"🌐 **active** ({user.price} RUB / {billing_period_days} days)" if english
+        subscription_status = (f"🌐 **active** (${settings.to_usd(user.price, user.price)} / {billing_period_days} days)" if english
                                else f"🌐 **настроено** ({user.price} руб / {billing_period_days} дней)")
     keyboard = [
         [Button.inline("🔗 Set up VPN" if english else "🔗 Настроить VPN", data="generate_settings_link")],

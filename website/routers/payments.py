@@ -145,8 +145,21 @@ async def nowpayments_webhook(request: Request):
 
     signature = request.headers.get("x-nowpayments-sig")
     if not signature or not nowpayments.verify_webhook_signature(payload, signature):
-        logger.warning(f"nowpayments webhook: неверная или отсутствующая подпись, ip={client_ip}")
-        return JSONResponse({"ok": False}, status_code=401)
+        # 22.10.26: настоящие вебхуки (17.08, 24.08, 21.10) ни разу не прошли подпись, хотя тестовые проходили, —
+        # причина не найдена (тело раньше не писалось). Деньги не теряем: как с неподписанными вебхуками UDM Pay,
+        # статус берём из API по payment_id нашим ключом, а вебхуку не верим ни в чём.
+        body = (await request.body()).decode(errors="replace")[:2000]
+        logger.warning(f"nowpayments webhook: неверная или отсутствующая подпись, ip={client_ip}, "
+                       f"sig={'есть' if signature else 'нет'}, тело={body}")
+        payment_id = payload.get("payment_id")
+        if not payment_id:
+            return JSONResponse({"ok": False}, status_code=401)
+        try:
+            payload = await nowpayments.get_payment_status(str(payment_id))
+        except Exception as e:
+            logger.error(f"nowpayments webhook: не удалось проверить платёж {payment_id} через API: {e}")
+            return JSONResponse({"ok": False}, status_code=503)  # NOWPayments повторит вебхук
+        logger.info(f"nowpayments webhook: платёж {payment_id} проверен через API, status={payload.get('payment_status')}")
 
     order_id = payload.get("invoice_id") or payload.get("order_id")
     if not order_id:

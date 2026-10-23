@@ -38,6 +38,23 @@ def static_v(path: str) -> str:
 
 templates.env.globals["static_v"] = static_v
 
+# Страницы с английской версией на своём адресе (18.10.26, как в Watoto: свой URL на язык + hreflang) — русский путь → английский.
+# Только эти попадают в поиск по-английски; остальные переводятся по cookie/языку браузера на том же адресе.
+EN_PAGES = {"/": "/en/", "/trial": "/en/trial"}
+RU_PAGES = {en: ru for ru, en in EN_PAGES.items()}
+
+
+def lang_alternates(path: str) -> dict | None:
+    """{'ru': '/', 'en': '/en/'} для страниц с двумя адресами — hreflang и переключатель языка; иначе None."""
+    if path in EN_PAGES:
+        return {"ru": path, "en": EN_PAGES[path]}
+    if path in RU_PAGES:
+        return {"ru": RU_PAGES[path], "en": path}
+    return None
+
+
+templates.env.globals["lang_alternates"] = lang_alternates
+
 
 def inline_css() -> Markup:
     """Tailwind + Font Awesome сабсет, инлайнятся прямо в <head> одним <style>

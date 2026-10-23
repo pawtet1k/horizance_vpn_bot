@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 
-{% block title %}VPN с пробным периодом для Happ — 24 часа бесплатно, без регистрации{% endblock %}
-{% block meta_description %}Пробный доступ к Horizance VPN на 24 часа: бесплатно, без карты и без регистрации. Готовая ссылка-подписка для Happ и INCY на Android, iPhone, Windows, macOS, Linux и телевизоре.{% endblock %}
-{% block meta_keywords %}впн пробный период happ, пробная подписка хапп, пробный впн, бесплатный впн на 24 часа, впн с пробным периодом, пробный ключ для happ, пробная подписка happ, vpn 24 hours{% endblock %}
-{% block canonical %}https://horizancevpn.com/trial{% endblock %}
+{% block title %}{{ t("VPN с пробным периодом для Happ — 24 часа бесплатно, без регистрации", "Free VPN trial for Happ — 24 hours, no sign-up") }}{% endblock %}
+{% block meta_description %}{{ t("Пробный доступ к Horizance VPN на 24 часа: бесплатно, без карты и без регистрации. Готовая ссылка-подписка для Happ и INCY на Android, iPhone, Windows, macOS, Linux и телевизоре.", "Try Horizance VPN free for 24 hours: no card, no sign-up. A ready subscription link for Happ and INCY on Android, iPhone, Windows, macOS, Linux and TV.") }}{% endblock %}
+{% block meta_keywords %}{{ t('впн пробный период happ, пробная подписка хапп, пробный впн, бесплатный впн на 24 часа, впн с пробным периодом, пробный ключ для happ, пробная подписка happ, vpn 24 hours', "vpn free trial, free vpn 24 hours, happ vpn trial, vless trial") }}{% endblock %}
+{% block canonical %}https://horizancevpn.com{{ t("/trial", "/en/trial") }}{% endblock %}
 
 {% block header_cta %}
 <a href="/" class="text-sm font-semibold text-ink2 border border-line2 rounded-xl px-4 py-2 hover:border-faint hover:bg-surface2 transition-colors">
@@ -113,7 +113,7 @@
 <p class="text-xs text-faint leading-relaxed mt-8 text-left">
   The website trial lasts exactly 24 hours — the same product as the paid subscription, no speed limits.
   New users who start the Telegram bot get {{ settings.trial_days }} free days; after that the subscription is
-  {{ settings.default_price }}&nbsp;RUB per month — about ${{ settings.CRYPTO_PRICE_USD[settings.default_price] }}, payable in cryptocurrency.
+  ${{ settings.CRYPTO_PRICE_USD[settings.default_price] }} per month or ${{ settings.CRYPTO_PRICE_USD[settings.yearly_price] }} per year — by card, Apple Pay or cryptocurrency.
 </p>
 {% else %}
 <p class="text-xs text-faint leading-relaxed mt-8 text-left">

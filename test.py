@@ -250,6 +250,10 @@ class BotIntegrationTestCase(unittest.IsolatedAsyncioTestCase):
         owner_patcher = patch.object(subscription, 'notify_owner', new=AsyncMock())
         self.mock_notify_owner = owner_patcher.start()
         self.addCleanup(owner_patcher.stop)
+        # письмо владельцу об ошибке в обработчике бота (main.safe_handler) - тоже без реального SMTP
+        alert_patcher = patch.object(main, 'alert_owner')
+        self.mock_alert_owner = alert_patcher.start()
+        self.addCleanup(alert_patcher.stop)
 
     def create_user(self, user_id, **overrides):
         defaults = dict(
@@ -363,11 +367,36 @@ class TestHelpQuickAnswers(BotIntegrationTestCase):
         main.waiting_for_question.discard(777010)
 
 
+class TestHandlerErrorAlert(BotIntegrationTestCase):
+    """Ошибка в обработчике бота — письмо владельцу, как у сайта (до 23.10.26 оставалась только в логе)."""
+
+    async def test_error_emails_owner(self):
+        event = message_event(777101, '/config')
+        with patch.object(main.bot, 'start_vpn_setup', new=AsyncMock(side_effect=AttributeError('boom'))):
+            await main.config(event)
+        key, subject, body = self.mock_alert_owner.call_args.args
+        self.assertEqual(key, 'bot:config:AttributeError')
+        self.assertIn('777101', body)
+        event.answer.assert_awaited()  # человеку по-прежнему «что-то пошло не так»
+
+
+class TestCommandBeforeStart(BotIntegrationTestCase):
+    """/config из меню раньше /start — человек заводится, а не получает «что-то пошло не так» (7661808842, 25.09.26)."""
+
+    async def test_config_before_start_creates_user(self):
+        with patch.object(main.bot, 'start_vpn_setup', new=AsyncMock()) as setup:
+            await main.config(message_event(777201, '/config'))
+        self.assertIsNotNone(self.get_user(777201))
+        setup.assert_awaited_once()
+        self.mock_alert_owner.assert_not_called()
+
+
 class TestWebLoginViaBot(BotIntegrationTestCase):
     """Вход на сайт через бота: /start login_<token> → «Войти?» → сайт заводит сессию (14.10.26)."""
 
     def _site(self):
         import sys, types
+        self.create_user(settings.OWNER_TELEGRAM_ID, referrals=0)  # новичка по QR бот записывает как пришедшего с сайта
         sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'website'))
         from routers import auth
         patcher = patch.object(auth, '_db', main.user_manager)
@@ -388,7 +417,8 @@ class TestWebLoginViaBot(BotIntegrationTestCase):
         start.sender.username, start.sender.first_name, start.sender.last_name = 'u1', 'Имя', None
         await main.start(start)
         self.assertIn('Windows, Chrome', start.reply.call_args.args[0])
-        self.assertIsNone(self.get_user(777001))  # /start с токеном не заводит пользователя в боте
+        # новый человек сразу заводится в боте — иначе «Оплатить» и /config падали на None (119410088, 23.10.26)
+        self.assertEqual(self.get_user(777001).referrer_id, settings.OWNER_TELEGRAM_ID)
         self.assertEqual((await self._status(auth, request))['status'], 'opened')
 
         stranger = callback_event(777002, 'wl_ok:tok1')  # чужое нажатие не подтверждает
@@ -397,9 +427,8 @@ class TestWebLoginViaBot(BotIntegrationTestCase):
 
         await main.web_login_answer(callback_event(777001, 'wl_ok:tok1'))
         result = await self._status(auth, request)
-        self.assertEqual(result, {'status': 'ok', 'is_new': True})
+        self.assertEqual(result, {'status': 'ok', 'is_new': False})
         self.assertEqual(request.session['user_id'], 777001)
-        self.assertEqual(self.get_user(777001).username, 'u1')
 
         other = __import__('types').SimpleNamespace(session={'bot_login': 'tok1'})
         self.assertEqual((await self._status(auth, other))['status'], 'expired')  # второй раз не войти
@@ -1453,13 +1482,18 @@ class TestNotificationLifecycle(BotIntegrationTestCase):
 
 class TestErrorResilience(BotIntegrationTestCase):
 
-    async def test_pay_for_unknown_user_reports_generic_error(self):
-        event = message_event(444001, '/pay')  # пользователь не создан
-
-        await main.add_subscription(event)  # не должно бросить исключение наружу
+    async def test_handler_error_reports_generic_error(self):
+        self.create_user(444001)
+        event = message_event(444001, '/pay')
+        with patch.object(main.bot, 'callback_add_subscription', new=AsyncMock(side_effect=RuntimeError('boom'))):
+            await main.add_subscription(event)  # не должно бросить исключение наружу
 
         event.answer.assert_awaited_once()
         self.assertIn('пошло не так', event.answer.call_args.args[0])
+
+    async def test_pay_for_unknown_user_creates_user(self):
+        await main.add_subscription(message_event(444002, '/pay'))  # пользователь не создан — заводится, как при /start
+        self.assertIsNotNone(self.get_user(444002))
 
 
 
@@ -1810,10 +1844,23 @@ class TestSubDoesNotWaitForNodes(unittest.IsolatedAsyncioTestCase):
                 patch.object(web_vpn, 'fetch_routing_deeplink', AsyncMock(return_value="")):
             resp = await web_vpn.get_client_config("uuid", request)
         body = resp.body.decode()
-        self.assertIn("horizancevpn.com/pay", body)
+        # 18.10.26: зовём в бота за бесплатными днями, оплата — уже там
+        self.assertIn("@horizance_vpn_bot", body)
         self.assertEqual(resp.headers["profile-web-page-url"], "https://horizancevpn.com/go/pay?src=happ_trial_over")
         announce = b64.b64decode(resp.headers["announce"].split(":", 1)[1]).decode()
-        self.assertIn("/pay", announce)
+        self.assertIn("@Horizance_vpn_bot", announce)
+
+    async def test_vpn_page_gives_app_the_subscription(self):
+        # 18.10.26: адрес страницы /vpn/<uuid> добавляют в Happ как подписку — приложению отдаём подписку, браузеру страницу
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'website'))
+        from routers import vpn as web_vpn
+        sub = AsyncMock(return_value="SUB")
+        with patch.object(web_vpn, 'get_client_config', sub):
+            app = await web_vpn.get_happ_link(MagicMock(headers={"user-agent": "Happ/4.7.1/Android/1"}), " uuid")
+        self.assertEqual(app, "SUB")
+        sub.assert_awaited_once()
+        self.assertEqual(sub.call_args.args[0], "uuid")
 
 
 
@@ -1826,6 +1873,17 @@ class TestLoginNextRedirect(unittest.TestCase):
         self.assertEqual(safe_next("/pay"), "/pay")
         for bad in (None, "", "https://evil.com", "//evil.com", "/\\evil.com"):
             self.assertEqual(safe_next(bad), "/dashboard")
+
+
+class TestIpLocationTimeout(unittest.IsolatedAsyncioTestCase):
+    """ip-api.com не ответил — пустой результат, а не 500 на /trial/connect (23.10.26)."""
+
+    async def test_timeout_returns_empty(self):
+        import sys, httpx
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'website'))
+        from routers import trial
+        with patch.object(httpx.AsyncClient, 'get', new=AsyncMock(side_effect=httpx.ConnectTimeout(''))):
+            self.assertEqual(await trial.get_ip_location('1.2.3.4'), {})
 
 
 class TestTrialExpiry(unittest.TestCase):
@@ -1899,3 +1957,70 @@ class TestEnglishForForeigners(unittest.TestCase):
         self.assertTrue(any('Cryptocurrency' in l for l in labels[:2]))
         self.assertIn('Russian bank', labels[-1])
         self.assertIn('СБП', bot_module.payment_method_buttons()[0][0].text)
+
+
+class TestPaidNotUsing(BotIntegrationTestCase):
+    """18.10.26: заплатил, а VPN почти не пользуется — на 2-й день напоминание с кнопкой, на 4-й — список владельцу."""
+
+    async def test_reminder_then_owner_report(self):
+        user_id = 555777
+        self.create_user(user_id, status=UserStatus.ACTIVE, start_date=self.past_date(20),
+                         next_payment_date=self.future_date(28), traffic_in=100, traffic_out=900,
+                         paid_traffic_mb=1000, paid_date=self.past_date(2), device_os="iOS")
+        await main.utils.run_notification_campaigns(main.vpn_bot, main.user_manager, settings.NOTIFICATION_CAMPAIGNS)
+        main.vpn_bot.send_message.assert_awaited_once()
+        self.assertIn("почти не использовался", main.vpn_bot.send_message.call_args.args[1])
+        button = main.vpn_bot.send_message.call_args.kwargs["buttons"][0][0]
+        self.assertEqual(button.data, b"generate_settings_link")
+
+        with patch.object(main.utils, "notify_owner", new=AsyncMock()) as owner:
+            main.user_manager.update_user(user_id, paid_date=self.past_date(4))
+            await main.utils.report_paid_not_using(main.user_manager)
+            await main.utils.report_paid_not_using(main.user_manager)  # второй цикл таймера — без повтора
+            owner.assert_awaited_once()
+            self.assertIn(str(user_id), owner.call_args.args[1])
+
+    async def test_user_who_connected_is_left_alone(self):
+        self.create_user(555778, status=UserStatus.ACTIVE, start_date=self.past_date(20),
+                         next_payment_date=self.future_date(28), traffic_in=100, traffic_out=900,
+                         paid_traffic_mb=500, paid_date=self.past_date(2), device_os="Android")
+        await main.utils.run_notification_campaigns(main.vpn_bot, main.user_manager, settings.NOTIFICATION_CAMPAIGNS)
+        main.vpn_bot.send_message.assert_not_awaited()
+
+
+class TestNowPaymentsWebhookFallback(unittest.IsolatedAsyncioTestCase):
+    """22.10.26: подпись настоящих вебхуков NOWPayments не сходилась — статус берём из API по payment_id."""
+
+    async def test_bad_signature_is_checked_via_api(self):
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'website'))
+        from routers import payments as web_payments
+        fake = {"payment_id": 555, "payment_status": "finished", "invoice_id": 1}  # вебхуку не верим
+        request = MagicMock(headers={"x-nowpayments-sig": "bad"})
+        request.json = AsyncMock(return_value=fake)
+        request.body = AsyncMock(return_value=b"{}")
+        api = AsyncMock(return_value={"payment_id": 555, "payment_status": "finished", "invoice_id": 6144630534})
+        activate = AsyncMock()
+        with patch.object(web_payments, "is_rate_limited", return_value=False), \
+                patch.object(web_payments, "get_client_ip", return_value="1.2.3.4"), \
+                patch.object(web_payments.nowpayments, "verify_webhook_signature", return_value=False), \
+                patch.object(web_payments.nowpayments, "get_payment_status", api), \
+                patch.object(web_payments._db, "get_user_by_order", return_value=MagicMock(user_id=42)) as by_order, \
+                patch.object(web_payments._subscriptions, "activate_paid_subscription", activate):
+            resp = await web_payments.nowpayments_webhook(request)
+        self.assertEqual(resp.status_code, 200)
+        api.assert_awaited_once_with("555")
+        by_order.assert_called_once_with("6144630534")  # номер заказа — из ответа API, не из вебхука
+        activate.assert_awaited_once()
+
+    async def test_bad_signature_without_payment_id_is_rejected(self):
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'website'))
+        from routers import payments as web_payments
+        request = MagicMock(headers={})
+        request.json = AsyncMock(return_value={"payment_status": "finished", "invoice_id": 1})
+        request.body = AsyncMock(return_value=b"{}")
+        with patch.object(web_payments, "is_rate_limited", return_value=False), \
+                patch.object(web_payments, "get_client_ip", return_value="1.2.3.4"):
+            resp = await web_payments.nowpayments_webhook(request)
+        self.assertEqual(resp.status_code, 401)

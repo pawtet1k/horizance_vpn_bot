@@ -82,8 +82,8 @@
       </form>
     {% elif quote.mode == "prorate" %}
       <p class="text-sm text-dim">{{ t("Подключатся сразу после доплаты за остаток оплаченного срока (до", "Added right after an extra charge for the rest of your paid period (until") }} {{ quote.until }}):
-        <span class="font-semibold text-ink2">{{ quote.rub }}&nbsp;₽{% if is_en() %} (${{ quote.usd }}){% endif %}</span>.
-        {{ t("Дальше — одно продление:", "Then one renewal:") }} {{ quote.renewal }}&nbsp;₽.</p>
+        <span class="font-semibold text-ink2">{% if is_en() %}${{ quote.usd }}{% else %}{{ quote.rub }}&nbsp;₽{% endif %}</span>.
+        {{ t("Дальше — одно продление:", "Then one renewal:") }} {% if is_en() %}${{ quote.renewal_usd }}{% else %}{{ quote.renewal }}&nbsp;₽{% endif %}.</p>
       {% set methods = ([("card", "💳 Card / Apple Pay")] if whop_enabled() else [])
            + [("crypto", "🪙 Cryptocurrency (USDT)"), ("sbp", "🏦 SBP — Russian bank cards only")]
            if is_en() else [("sbp", "💳 СБП"), ("crypto", "🪙 Криптовалюта")] %}
@@ -99,7 +99,7 @@
         {% endfor %}
       </div>
     {% else %}
-      <p class="text-sm text-dim">{{ t("Войдут в оплату подписки:", "Included in your subscription payment:") }} +{{ quote.addon }}&nbsp;₽ ({{ t("всего", "total") }} {{ quote.renewal }}&nbsp;₽).</p>
+      <p class="text-sm text-dim">{{ t("Войдут в оплату подписки:", "Included in your subscription payment:") }} {% if is_en() %}+${{ quote.addon_usd }} (total ${{ quote.renewal_usd }}){% else %}+{{ quote.addon }}&nbsp;₽ (всего {{ quote.renewal }}&nbsp;₽){% endif %}.</p>
       <form method="post" action="/devices/extra/with_subscription" class="w-full mt-2">
         <button type="submit" class="w-full text-center text-sm font-semibold rounded-xl py-3 bg-white text-black hover:opacity-90 transition-opacity">
           {{ t("Оплатить подписку с доп. устройствами", "Pay for subscription with extra devices") }}

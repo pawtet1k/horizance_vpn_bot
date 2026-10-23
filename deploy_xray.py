@@ -1,10 +1,13 @@
 import asyncio
 import asyncssh
 import json
+import shlex
+import sys
 from typing import Any
 
 import credentials
 from restore_users import restore_vpn
+from vpn import ssh_connect_kwargs
 
 
 INSTALL_CMD = (
@@ -23,19 +26,16 @@ def get_target_server(i) -> dict[str, Any]:
 
 class SSHClient:
     def __init__(self, cfg: dict[str, Any]) -> None:
+        self.server = cfg
         self.host = cfg["host"]
-        self.port = cfg["port"]
+        self.port = cfg.get("port", 22)
         self.username = cfg["username"]
-        self.password = cfg["password"]
+        # у нод с ssh_key_path пароля нет, sudo там без пароля — sudo -S получит пустую строку
+        self.password = cfg.get("password") or ""
         self.conn: asyncssh.SSHClientConnection | None = None
 
     async def connect(self) -> None:
-        self.conn = await asyncssh.connect(
-            self.host, port=self.port,
-            username=self.username,
-            password=self.password,
-            known_hosts=None,
-        )
+        self.conn = await asyncssh.connect(**ssh_connect_kwargs(self.server))
 
     async def run(self, cmd: str) -> str:
         if not self.conn:
@@ -130,6 +130,65 @@ async def truncate_logs(client: SSHClient) -> str:
         "truncate -s 0 /var/log/xray/access.log /var/log/xray/error.log"
     )
 
+def fail2ban_jail(server: dict) -> str:
+    """Общая настройка fail2ban всех нод (с 18.10.26). Белый список — IP всех
+    наших серверов: бот ходит на ноды по ssh с NL."""
+    hosts = " ".join(s["host"] for s in credentials.SERVERS)
+    return (
+        "# Horizance (18.10.26): одна настройка на всех нодах, как на MX. Белый список — IP всех наших серверов\n"
+        "# (бот ходит на ноды по ssh с NL). jail.d/*.local читается последним и перекрывает jail.local.\n"
+        "# Пишется deploy_xray.ensure_fail2ban — правки вручную перезапишутся при следующем деплое.\n"
+        "[DEFAULT]\n"
+        f"ignoreip = 127.0.0.1/8 ::1 {hosts}\n"
+        "maxretry = 5\nfindtime = 10m\nbantime = 1h\n"
+        "bantime.increment = true\nbantime.maxtime = 1w\n\n"
+        "[sshd]\nenabled = true\nmaxretry = 5\nfindtime = 10m\nbantime = 1h\n"
+        "backend = systemd\n"
+        "# порт(ы), где реально слушает sshd на этой ноде\n"
+        f"port = {server.get('port', 22)}\n"
+    )
+
+async def ensure_fail2ban(client: SSHClient, server: dict) -> str:
+    """Ставит fail2ban, если его нет, и приводит jail к общей настройке."""
+    jail = shlex.quote(fail2ban_jail(server))
+    await client.sudo_run(
+        "command -v fail2ban-client >/dev/null || "
+        "DEBIAN_FRONTEND=noninteractive apt-get install -y -q fail2ban >/dev/null 2>&1; "
+        f"printf %s {jail} > /etc/fail2ban/jail.d/horizance-sshd.local; "
+        "systemctl enable fail2ban >/dev/null 2>&1; systemctl restart fail2ban"
+    )
+    await asyncio.sleep(3)
+    return await client.sudo_run("fail2ban-client status sshd | grep -E 'Currently|Total banned'")
+
+async def ensure_log_access(client: SSHClient) -> str:
+    """access.log xray читается пользователем ssh без sudo: файл <xray>:adm 640,
+    пользователь в группе adm, ротация copytruncate (права файла сохраняются)."""
+    logrotate = shlex.quote(
+        "/var/log/xray/*.log {\n    daily\n    maxsize 100M\n"
+        "    # старые не удаляем (решение владельца 25.09.26): 3650 сжатых архивов ~ 10 лет\n"
+        "    rotate 3650\n    compress\n    delaycompress\n    missingok\n    notifempty\n    copytruncate\n}\n"
+    )
+    return await client.sudo_run(
+        "U=$(systemctl show xray -p User --value); U=${U:-nobody}; "
+        "mkdir -p /var/log/xray; chmod 755 /var/log/xray; "
+        "touch /var/log/xray/access.log /var/log/xray/error.log; "
+        "chown $U:adm /var/log/xray/*.log; chmod 640 /var/log/xray/*.log; "
+        f"usermod -aG adm {shlex.quote(client.username)}; "
+        f"[ -f /etc/logrotate.d/xray ] || printf %s {logrotate} > /etc/logrotate.d/xray; "
+        "ls -l /var/log/xray/access.log"
+    )
+
+async def ensure_port_443(client: SSHClient) -> str:
+    """Образы Oracle режут всё, кроме 22, правилом REJECT в iptables."""
+    return await client.sudo_run(
+        "if iptables -S INPUT | grep -q 'REJECT' && "
+        "! iptables -C INPUT -p tcp -m state --state NEW -m tcp --dport 443 -j ACCEPT 2>/dev/null; then "
+        "iptables -I INPUT $(iptables -S INPUT | grep -n REJECT | head -1 | cut -d: -f1 | awk '{print $1-1}') "
+        "-p tcp -m state --state NEW -m tcp --dport 443 -j ACCEPT && "
+        "(netfilter-persistent save >/dev/null 2>&1 || true) && echo '443 opened'; "
+        "else echo '443 ok'; fi"
+    )
+
 async def function(client: SSHClient):
     result = await client.sudo_run(
         'grep -r "xray" /etc/cron* /var/spool/cron/ 2>/dev/null'
@@ -144,6 +203,10 @@ async def deploy(server) -> None:
 
         last_reboot_date = await get_last_reboot_date(client)
         print(f"[{s_label}] Last reboot was on {last_reboot_date}")
+
+        if server.get("role") != "localhost":
+            print(f"[{s_label}] firewall: {(await ensure_port_443(client)).strip()}")
+        print(f"[{s_label}] fail2ban: {(await ensure_fail2ban(client, server)).strip()}")
 
         latest_version = await get_latest_xray_version(client)
         exists = await check_xray(client, latest_version)
@@ -182,6 +245,8 @@ async def deploy(server) -> None:
         last_xray_restart_date = await get_last_xray_restart_date(client)
         print(f"[{s_label}] Last xray restart was on {last_xray_restart_date}")
 
+        print(f"[{s_label}] access.log: {(await ensure_log_access(client)).strip()}")
+
         await truncate_logs(client)
         print(f"[{s_label}] Logs truncated")
 
@@ -193,9 +258,15 @@ async def deploy(server) -> None:
         await client.close()
 
 async def main():
-    for i in range(1,4):
-        server = get_target_server(i)
-        await deploy(server)
+    # Только явно названные ноды: deploy перезапускает xray, а раньше main() молча
+    # проходил по SERVERS[1..3] и клал рабочие ноды.
+    names = sys.argv[1:]
+    known = {s["name"]: s for s in credentials.SERVERS}
+    if not names or any(n not in known for n in names):
+        print(f"usage: deploy_xray.py NAME [NAME ...]   ноды: {', '.join(known)}")
+        sys.exit(1)
+    for name in names:
+        await deploy(known[name])
 
 if __name__ == "__main__":
     asyncio.run(main())

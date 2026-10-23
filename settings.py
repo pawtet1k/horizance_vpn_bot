@@ -258,8 +258,16 @@ NOWPAYMENTS_ENABLED = True
 # самой биржи, не зависящий от выбора сети. Проверено через API 2026-08-14.
 CRYPTO_PRICE_USD = {
     default_price: 1.8,
-    yearly_price: 11.9,
+    yearly_price: 12.9,   # владелец 18.10.26: год $12.9 (было $11.9) — покрывает комиссии Whop за не-долларовую карту
 }
+# Иностранцу цены — только в долларах (владелец 18.10.26), скидка года — от долларовых цен, не от рублёвых
+yearly_saving_usd = round(CRYPTO_PRICE_USD[default_price] * 12 - CRYPTO_PRICE_USD[yearly_price], 2)
+yearly_discount_percent_usd = round(100 * yearly_saving_usd / (CRYPTO_PRICE_USD[default_price] * 12))
+
+
+def to_usd(rub_amount: int, plan_price: int) -> float:
+    """Рублёвая сумма заказа (тариф, опция) → доллары по курсу тарифа plan_price (как берут крипта и Whop)."""
+    return round(get_crypto_price_usd(plan_price) * rub_amount / plan_price, 2) if plan_price else 0
 
 
 def get_crypto_price_usd(price: int) -> int:
@@ -304,6 +312,22 @@ def _vpn_not_enabled(row: dict) -> bool:
         and days_since(row['start_date']) == 3
     )
 
+# Заплатил, а VPN почти не пользуется (владелец 18.10.26): из 8 не продливших первый месяц 5 за месяц набрали 0–125 МБ —
+# потеряны на подключении, а не на цене. Через PAID_NOT_USING_DAY дней после оплаты — напоминание с кнопкой настройки,
+# через PAID_NOT_USING_REPORT_DAY — список владельцу (utils.report_paid_not_using), дальше пишем лично.
+PAID_NOT_USING_MB = 50
+PAID_NOT_USING_DAY = 2
+PAID_NOT_USING_REPORT_DAY = 4
+
+
+def paid_not_using(row: dict, day: int) -> bool:
+    return (
+        row['status'] == 'active' and bool(row['paid_date']) and row['device_os'] != ROUTER_DEVICE
+        and days_since(row['paid_date']) == day
+        and (row['traffic_in'] or 0) + (row['traffic_out'] or 0) - (row['paid_traffic_mb'] or 0) < PAID_NOT_USING_MB
+    )
+
+
 NOTIFICATION_CAMPAIGNS = [
     Campaign(
         _happ_setup_issue,
@@ -318,6 +342,16 @@ NOTIFICATION_CAMPAIGNS = [
         "VPN не включен",
         "🔌 The app is installed, but the VPN is off. Turn it on with the connect button in the app 🔘. "
         "Doesn't work — send /help!",
+    ),
+    Campaign(
+        lambda row: paid_not_using(row, PAID_NOT_USING_DAY),
+        "👋 Спасибо за оплату! За эти два дня VPN почти не использовался. Нажмите кнопку — бот пришлёт настройку "
+        "для вашего устройства. Не получается — напишите сюда, поможем.",
+        "заплатил и не пользуется",
+        "👋 Thanks for your payment! The VPN has barely been used in these two days. Tap the button and the bot will "
+        "send the setup for your device. Doesn't work — write here and we'll help.",
+        [("🔌 Подключить VPN", "generate_settings_link")],
+        [("🔌 Connect VPN", "generate_settings_link")],
     ),
 ]
 

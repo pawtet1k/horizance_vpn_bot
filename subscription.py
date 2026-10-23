@@ -318,12 +318,14 @@ class SubscriptionManager:
             until = None
         today = datetime.now().date()
         if not (user.status == UserStatus.ACTIVE and user.paid_periods and until and until >= today):
-            return {"mode": "with_subscription", "addon": addon, "renewal": renewal}
+            return {"mode": "with_subscription", "addon": addon, "renewal": renewal,
+                    "addon_usd": settings.to_usd(addon, user.price), "renewal_usd": settings.to_usd(renewal, user.price)}
         period = settings.get_billing_period_days(user.price)
         share = min(1.0, ((until - today).days + 1) / period)
         usd_addon = settings.get_crypto_price_usd(user.price) * addon / user.price
         return {
             "mode": "prorate", "addon": addon, "renewal": renewal, "until": user.next_payment_date,
+            "renewal_usd": settings.to_usd(renewal, user.price),
             "rub": max(settings.EXTRA_DEVICES_MIN_CHARGE_RUB, math.ceil(addon * share)),
             "usd": max(settings.EXTRA_DEVICES_MIN_CHARGE_USD, round(usd_addon * share, 2)),
         }
@@ -486,6 +488,7 @@ class SubscriptionManager:
             f"Имя: {full_name}\n"
             f"Сумма: {amount_label}\n"
             f"Тариф: {plan_label} ({days} дней)\n"
+            f"Оплачено всего, с этой оплатой: {user.paid_periods} мес.\n"
             f"Провайдер: {provider}\n"
             f"orderId: {order_uid}\n"
             + autopay
@@ -585,6 +588,8 @@ class SubscriptionManager:
             next_payment_date=next_payment_date,
             status=UserStatus.ACTIVE,
             pending_order_uid=None,
+            paid_traffic_mb=user.traffic_total_mb(),
+            paid_date=datetime.now().strftime("%d.%m.%y"),
         )
         if addon_paid:
             # опция продлена вместе с подпиской — до той же даты

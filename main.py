@@ -1,5 +1,6 @@
 import asyncio
 import inspect
+import traceback
 from telethon import TelegramClient, events
 from telethon.tl.types import KeyboardButton, MessageMediaWebPage, ReplyKeyboardMarkup
 import pymorphy3
@@ -15,6 +16,7 @@ from node_monitor import NodeMonitor
 from db import UserManager
 from subscription import SubscriptionManager
 from vpn import VPNManager
+from website.error_alerts import notify as alert_owner
 
 
 api_id = credentials.API_ID
@@ -52,6 +54,11 @@ def safe_handler(func):
                 pass
             return
         try:
+            # Команда из меню или текст раньше /start: человека ещё нет в users, и /config, /pay падали на None
+            # (7661808842 25.09, 119410088 23.10.26). Сначала заводим его, как при /start, потом выполняем команду.
+            is_message = getattr(event, "data", None) is None and getattr(event, "message", None) is not None
+            if func.__name__ != "start" and is_message and user_manager.get_user(event.sender_id) is None:
+                await bot.handle_start(event, vpn_bot, event.sender_id, user_manager, subscription_manager, morth)
             await func(event)
         except Exception as e:
             logger.error(
@@ -59,6 +66,12 @@ def safe_handler(func):
                 f'(user {event.sender_id}): {e}',
                 exc_info=True  # <-- полный traceback в лог
             )
+            # Письмо владельцу, как у сайта (website/error_alerts.py): до 23.10.26 ошибки бота оставались только в логе —
+            # «Оплатить» и /config у 119410088 падали, а владелец не узнал. Не чаще раза в 30 мин на ошибку+обработчик.
+            await asyncio.to_thread(
+                alert_owner, f"bot:{func.__name__}:{type(e).__name__}",
+                f"Horizance VPN: ошибка в боте — {func.__name__}, {type(e).__name__}",
+                f"Пользователь {event.sender_id}, обработчик {func.__name__}\n{type(e).__name__}: {e}\n\n{traceback.format_exc()}")
             try:
                 await event.answer(tr(event.sender_id,
                     "Что-то пошло не так. Попробуйте позже или сообщите об этой ошибке разработчику, написав: '/help'.",
@@ -74,6 +87,10 @@ async def start(event):
     logging_command(event.sender.id)
     payload = event.message.text.split()[-1]
     if payload.startswith(settings.WEB_LOGIN_PREFIX):
+        # Новый человек, впервые открывший бота по QR входа на сайт, иначе не попадал в users — «Оплатить» и /config
+        # падали на None, пока он не нажмёт обычный /start (119410088, 23.10.26). Сначала карточка, вопрос о входе — последним.
+        if user_manager.get_user(event.sender.id) is None:
+            await bot.handle_start(event, vpn_bot, event.sender.id, user_manager, subscription_manager, morth)
         await bot.handle_web_login(event, vpn_bot, event.sender.id, payload[len(settings.WEB_LOGIN_PREFIX):], user_manager)
         return
     await bot.handle_start(

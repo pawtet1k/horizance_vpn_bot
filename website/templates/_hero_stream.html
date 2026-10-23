@@ -1,0 +1,176 @@
+{# Hero-анимация «поток через тоннель» — общая для index.html и index_en.html (владелец 18.10.26: на английской
+   главной её не было). Подключать внутри hero-<section>, перед </section>. #}
+<style>
+  /* ═══ Hero-анимация «поток через тоннель» (canvas, скрипт в конце страницы):
+     слева — открытый трафик читаемыми строками, в центре — кольцо-вход
+     в туннель, справа — тот же поток снаружи: волны нечитаемого шифра.
+     Маска гасит сцену у краёв контейнера, чтобы поток «приходил из ниоткуда». ═══ */
+  .hero-stream {
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
+  }
+</style>
+  <!-- ═══ Анимированная сцена «поток через тоннель»: слева — открытый трафик,
+       который видит провайдер (читаемые строки стягиваются в жерло), в центре —
+       светящееся кольцо-вход в туннель Horizance, справа — тот же поток снаружи:
+       колышущиеся волны нечитаемого шифра. Рисуется скриптом в конце страницы;
+       при prefers-reduced-motion выводится один статичный кадр. ═══ -->
+  <div class="relative mt-10" aria-hidden="true">
+    <canvas id="hero-stream" class="hero-stream block w-full max-w-6xl mx-auto h-40 md:h-[270px]"></canvas>
+    <div class="max-w-6xl mx-auto px-6 mt-3 flex justify-between font-mono text-[10px] md:text-xs tracking-[0.2em] select-none">
+      <span class="text-[#7f1d1d]">{{ t("БЕЗ VPN · ТРАФИК ЧИТАЕМ", "NO VPN · READABLE") }}</span>
+      <span class="text-[#4d7c0f]">{{ t("С HORIZANCE · ШИФР", "HORIZANCE · ENCRYPTED") }}</span>
+    </div>
+  </div>
+<script>
+/* Hero «поток через тоннель». Бюджет производительности: один canvas,
+   ~300 fillText/кадр, dpr ≤ 2, пауза вне вьюпорта и в фоновой вкладке. */
+(function () {
+  const canvas = document.getElementById('hero-stream');
+  if (!canvas || !canvas.getContext) return;
+  const ctx = canvas.getContext('2d');
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // то, что провайдер видит в открытом трафике
+  const LINES = [
+    'GET /watch?v=dQw4w9WgXcQ HTTP/1.1',
+    'login: pasha_92  pass: ********',
+    'dns: instagram.com  ip: 157.240.5.63',
+    {{ t('msg: созвон в 19:00? скину ссылку', 'msg: call at 7pm? will send a link') | tojson }},
+    'card: 4276 55** **** 8817',
+    {{ t('search: как обойти блокировку youtube', 'search: best vpn for travel') | tojson }},
+  ];
+  const CIPHER = '01#%&@¤§ΞΔΦλΩ∑√≠≋∷⊘⌁◇◆ｱｳｴｶｷｹｺｻｼﾂﾃﾅﾉ';
+
+  let w = 0, h = 0, raf = 0, running = false, inView = false, t = 0, last = 0;
+
+  function resize() {
+    const r = canvas.getBoundingClientRect();
+    w = r.width; h = r.height;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function hash(n) { // детерминированный псевдослучайный [0,1)
+    n |= 0;
+    n = Math.imul(n ^ (n >>> 15), n | 1);
+    n ^= n + Math.imul(n ^ (n >>> 7), n | 61);
+    return ((n ^ (n >>> 14)) >>> 0) / 4294967296;
+  }
+
+  const lerp = (a, b, k) => a + (b - a) * k;
+  const clamp01 = v => Math.max(0, Math.min(1, v));
+  // фирменный градиент #2563eb → #22d3ee
+  const brand = (k, a) =>
+    'rgba(' + Math.round(lerp(37, 34, k)) + ',' + Math.round(lerp(99, 211, k)) + ',' +
+    Math.round(lerp(235, 238, k)) + ',' + a + ')';
+
+  function draw() {
+    ctx.clearRect(0, 0, w, h);
+    const cy = h * 0.52;
+    const ringX = w < 640 ? w * 0.44 : w * 0.5;
+    const ringRy = h * 0.36;
+    const fs = h < 200 ? 11 : 13;
+    const mono = px => px + 'px "JetBrains Mono", monospace';
+
+    // левая часть: строки открытого трафика стягиваются в жерло кольца
+    const nLines = h < 200 ? 4 : 6;
+    ctx.font = mono(fs);
+    const cw = fs * 0.62; // ширина знака JetBrains Mono ≈ 0.6em
+    const funnelStart = ringX - w * 0.18;
+    for (let i = 0; i < nLines; i++) {
+      const line = LINES[i % LINES.length] + '   ';
+      const laneY = h * 0.14 + h * 0.72 * (i / (nLines - 1)) + 2 * Math.sin(t * 0.8 + i * 2.1);
+      const speed = 26 + 9 * hash(i * 131);
+      const shift = (t * speed) % (line.length * cw);
+      for (let j = Math.ceil(-shift / cw) - 1; j * cw + shift < ringX - 14; j++) {
+        const x = j * cw + shift;
+        if (x < -cw) continue;
+        const ch = line[((j % line.length) + line.length) % line.length];
+        if (ch === ' ') continue;
+        const p = clamp01((x - funnelStart) / (ringX - 14 - funnelStart));
+        const e = p * p * (3 - 2 * p); // smoothstep: втягивание в жерло
+        ctx.fillStyle = p > 0 ? brand(0, 0.3 + 0.7 * e) : 'rgba(120,127,140,0.5)';
+        ctx.fillText(ch, x, lerp(laneY, cy, e));
+      }
+    }
+
+    // правая часть: волны шифра разлетаются из кольца и колышутся как море
+    const layers = [
+      { A: 0.30, wl: 200, om: 1.1, alpha: 0.90, dfs: 1,  ph: 0.0 },
+      { A: 0.22, wl: 150, om: 1.5, alpha: 0.55, dfs: 0,  ph: 2.1 },
+      { A: 0.15, wl: 115, om: 2.0, alpha: 0.35, dfs: -1, ph: 4.2 },
+    ];
+    const step = fs + 1;
+    for (let l = 0; l < layers.length; l++) {
+      const L = layers[l];
+      ctx.font = mono(fs + L.dfs);
+      const k = Math.PI * 2 / L.wl;
+      for (let x = ringX + 10; x < w + step; x += step) {
+        const col = Math.round(x / step);
+        const p = clamp01((x - ringX) / (w - ringX));
+        const grow = Math.min(1, (x - ringX) / (w * 0.22));
+        const A = h * L.A * grow * (2 - grow); // ease-out: разлёт из кольца
+        const y = cy + A * Math.sin(k * x - L.om * t + L.ph);
+        const tb = Math.floor(t * 2.6 + hash(col * 13 + l * 97) * 4); // мерцание глифов
+        const ch = CIPHER[Math.floor(hash(col * 131 + l * 977 + tb * 7919) * CIPHER.length)];
+        const burst = l === 0 && grow < 0.5 ? 0.4 * (1 - grow * 2) : 0; // вспышка на выходе
+        ctx.fillStyle = brand(p, Math.min(1, L.alpha * (0.35 + 0.65 * grow) + burst));
+        ctx.fillText(ch, x, y);
+      }
+    }
+
+    // кольцо-тоннель поверх потоков
+    const pulse = 1 + 0.02 * Math.sin(t * 1.8);
+    const grad = ctx.createLinearGradient(0, cy - ringRy, 0, cy + ringRy);
+    grad.addColorStop(0, '#22d3ee'); grad.addColorStop(1, '#2563eb');
+    ctx.save();
+    ctx.shadowColor = 'rgba(34,211,238,0.6)';
+    ctx.shadowBlur = 22;
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.ellipse(ringX, cy, 11, ringRy * pulse, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+    ctx.strokeStyle = 'rgba(94,160,255,0.35)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.ellipse(ringX, cy, 5.5, ringRy * 0.82 * pulse, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  function frame(ts) {
+    if (!running) return;
+    if (last) t += Math.min(ts - last, 50) / 1000;
+    last = ts;
+    draw();
+    raf = requestAnimationFrame(frame);
+  }
+  function start() {
+    if (running || reduceMotion) return;
+    running = true; last = 0;
+    raf = requestAnimationFrame(frame);
+  }
+  function stop() { running = false; cancelAnimationFrame(raf); }
+
+  resize();
+  window.addEventListener('resize', () => { resize(); if (!running) draw(); });
+  if (reduceMotion) {
+    t = 2.4; draw();
+  } else {
+    const io = new IntersectionObserver(es => {
+      inView = es[0].isIntersecting;
+      inView && !document.hidden ? start() : stop();
+    });
+    io.observe(canvas);
+    document.addEventListener('visibilitychange', () => {
+      document.hidden ? stop() : (inView && start());
+    });
+  }
+  // после подгрузки веб-шрифта перерисовать статичный кадр, если анимация не идёт
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (!running) draw(); });
+})();
+</script>

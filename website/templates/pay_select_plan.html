@@ -26,12 +26,21 @@
     <div class="bg-surface border border-line2 rounded-2xl p-6 flex flex-col items-start gap-1">
       <span class="text-sm font-semibold text-dim">{{ t({'month': 'Месяц', 'year': 'Год'}[plan], {'month': 'Month', 'year': 'Year'}[plan]) }}</span>
       {% set total = price + (settings.get_extra_devices_price(price) if extra else 0) %}
-      <span class="text-2xl font-extrabold text-ink">{{ total }}&nbsp;₽{% if is_en() and settings.CRYPTO_PRICE_USD.get(price) %} <span class="text-base font-semibold text-dim">≈ ${{ (settings.CRYPTO_PRICE_USD[price] * total / price) | round(2) }}</span>{% endif %}</span>
+      {# иностранцу — только доллары (владелец 18.10.26) #}
+      <span class="text-2xl font-extrabold text-ink">{% if is_en() %}${{ settings.to_usd(total, price) }}{% else %}{{ total }}&nbsp;₽{% endif %}</span>
       {% if extra %}
-      <span class="text-sm text-dim">{{ t("подписка", "subscription") }} {{ price }}&nbsp;₽ + {{ settings.EXTRA_DEVICES_COUNT }} {{ t("доп. устройства", "extra devices") }} {{ settings.get_extra_devices_price(price) }}&nbsp;₽ · <a href="/devices" class="underline">{{ t("изменить", "change") }}</a></span>
+      {% if is_en() %}
+      <span class="text-sm text-dim">subscription ${{ settings.to_usd(price, price) }} + {{ settings.EXTRA_DEVICES_COUNT }} extra devices ${{ settings.to_usd(settings.get_extra_devices_price(price), price) }} · <a href="/devices" class="underline">change</a></span>
+      {% else %}
+      <span class="text-sm text-dim">подписка {{ price }}&nbsp;₽ + {{ settings.EXTRA_DEVICES_COUNT }} доп. устройства {{ settings.get_extra_devices_price(price) }}&nbsp;₽ · <a href="/devices" class="underline">изменить</a></span>
+      {% endif %}
       {% endif %}
       {% if plan == 'year' %}
-      <span class="text-sm font-semibold text-accent">−{{ settings.yearly_discount_percent }}%: {{ t("выгода", "you save") }} {{ settings.yearly_saving_rub }}&nbsp;₽ {{ t("против помесячной оплаты", "compared to monthly") }}</span>
+      {% if is_en() %}
+      <span class="text-sm font-semibold text-accent">−{{ settings.yearly_discount_percent_usd }}%: you save ${{ settings.yearly_saving_usd }} compared to monthly</span>
+      {% else %}
+      <span class="text-sm font-semibold text-accent">−{{ settings.yearly_discount_percent }}%: выгода {{ settings.yearly_saving_rub }}&nbsp;₽ против помесячной оплаты</span>
+      {% endif %}
       {% endif %}
       <div class="w-full flex flex-col gap-2 mt-4">
         {% for method, label, goal in methods %}

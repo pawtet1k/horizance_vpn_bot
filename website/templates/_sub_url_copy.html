@@ -1,0 +1,35 @@
+{# Адрес подписки с кнопкой «Копировать» — его понимает любое VPN-приложение.
+   Столбиком, а не в строку: на iPhone в портрете поле не сжималось и кнопка
+   уезжала за край экрана (проверено Playwright, 375px). #}
+<div class="flex flex-col gap-2">
+  <input id="sub-url-field" type="text" readonly value="{{ sub_url }}"
+         class="w-full min-w-0 bg-surface border border-line rounded-lg px-3 py-2
+                text-xs text-ink font-mono">
+  <button type="button" id="sub-url-copy"
+          data-done="{{ t('Скопировано', 'Copied') }}"
+          class="w-full bg-white text-black text-xs font-semibold rounded-lg py-2.5 cursor-pointer">
+    {{ t('Копировать', 'Copy') }}
+  </button>
+</div>
+
+<script>
+  (function () {
+    const field = document.getElementById('sub-url-field');
+    const button = document.getElementById('sub-url-copy');
+    if (!field || !button) return;
+    const label = button.textContent;
+    button.addEventListener('click', async function () {
+      // Safari отдаёт navigator.clipboard только по https и не во всех
+      // версиях, поэтому оставляем select()+execCommand как запасной путь.
+      try {
+        await navigator.clipboard.writeText(field.value);
+      } catch (e) {
+        field.select();
+        field.setSelectionRange(0, field.value.length);
+        document.execCommand('copy');
+      }
+      button.textContent = button.dataset.done;
+      setTimeout(function () { button.textContent = label; }, 2000);
+    });
+  })();
+</script>

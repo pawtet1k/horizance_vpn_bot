@@ -11,7 +11,9 @@ import httpx
 from my_logger import logger
 
 # message_en — тот же текст по-английски для иностранцев (i18n.is_english)
-Campaign = namedtuple('Campaign', ['predicate', 'message', 'name', 'message_en'], defaults=(None,))
+# buttons — [(текст, callback_data), ...] одним рядом каждая; buttons_en — то же по-английски
+Campaign = namedtuple('Campaign', ['predicate', 'message', 'name', 'message_en', 'buttons', 'buttons_en'],
+                      defaults=(None, None, None))
 
 
 def generate_qrcode(link):
@@ -35,6 +37,7 @@ async def start_timer(
             await run_notification_campaigns(
                 vpn_bot, user_manager, notification_campaigns
             )
+            await report_paid_not_using(user_manager)
             await check_download_links(download_urls)
             await refresh_geo_assets()
             logger.info('Цикл таймера завершён.')
@@ -176,10 +179,34 @@ async def run_notification_campaigns(vpn_bot, user_manager, campaigns):
             row['user_id'] for row in users if campaign.predicate(row)
         ]
         if target_ids:
+            from telethon import Button
+            rows = lambda pairs: [[Button.inline(text, data)] for text, data in pairs] if pairs else None
             await broadcast_message(
                 vpn_bot, user_manager, target_ids, campaign.message, campaign.name,
-                message_en=campaign.message_en
+                buttons=rows(campaign.buttons), message_en=campaign.message_en,
+                buttons_en=rows(campaign.buttons_en)
             )
+
+PAID_NOT_USING_REPORT = "владельцу: заплатил и не пользуется"
+
+
+async def report_paid_not_using(user_manager):
+    """Заплатил, а VPN почти не пользуется и после напоминания (settings._paid_not_using) — на N-й день список владельцу:
+    этим пишем лично, проверив логи (docs/USER_COMMUNICATION_RULES.md). Одна строка на человека один раз (отметка в notifications)."""
+    import settings  # локальный импорт — settings.py импортирует utils.py
+    rows = [r for r in user_manager.load_users() if settings.paid_not_using(r, settings.PAID_NOT_USING_REPORT_DAY)]
+    lines = []
+    for row in rows:
+        user = user_manager.get_user(row['user_id'])
+        if PAID_NOT_USING_REPORT in (user.notifications or ""):
+            continue
+        lines.append(f"{user.user_id} @{user.username} — {user.device_os}, оплата {user.paid_date}, "
+                     f"трафик с оплаты {user.traffic_total_mb() - (user.paid_traffic_mb or 0)} МБ")
+        _record_notification(user_manager, user, PAID_NOT_USING_REPORT)
+    if lines:
+        await notify_owner("Заплатили, но не пользуются VPN",
+                           "Оплатили, а VPN почти не пользуются (после напоминания бота). Написать лично:\n" + "\n".join(lines))
+
 
 async def ping(vpn_bot):
     from telethon.tl.functions import PingRequest
